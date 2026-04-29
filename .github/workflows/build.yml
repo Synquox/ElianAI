@@ -18,6 +18,12 @@ jobs:
     - name: Select Xcode
       run: sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
     
+    - name: Install XcodeGen
+      run: brew install xcodegen
+      
+    - name: Generate Xcode Project
+      run: xcodegen generate
+    
     - name: Show Xcode version
       run: xcodebuild -version
     

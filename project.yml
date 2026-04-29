@@ -1,0 +1,28 @@
+name: ElianAI
+options:
+  bundleIdPrefix: com.synquox
+packages:
+  GenerativeAI:
+    url: https://github.com/google/generative-ai-swift
+    from: 0.5.0
+  MarkdownUI:
+    url: https://github.com/gonzalezreal/swift-markdown-ui
+    from: 2.4.0
+targets:
+  ElianAI:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: ElianAI
+        excludes:
+          - "**/*.plist"
+    dependencies:
+      - package: GenerativeAI
+        product: GoogleGenerativeAI
+      - package: MarkdownUI
+    info:
+      path: ElianAI/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSupportsMultipleScenes: true
