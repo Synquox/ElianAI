@@ -25,100 +25,12 @@ struct AnalyticsDashboardView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                // Header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Study Analytics")
-                        .font(.system(size: 28, weight: .bold))
-                        .foregroundStyle(.elianTextPrimary)
-                    
-                    Text(folder.name)
-                        .font(.system(size: 16))
-                        .foregroundStyle(Color(hex: folder.accentColorHex))
-                }
-                .padding(.horizontal, 24)
+                headerSection
                 
                 if attempts.isEmpty {
-                    EmptyStudyView(
-                        icon: "chart.line.uptrend.xyaxis",
-                        title: "No Data Yet",
-                        subtitle: "Complete quizzes in this folder to see your performance over time.",
-                        color: Color(hex: folder.accentColorHex)
-                    )
-                    .frame(height: 300)
+                    emptySection
                 } else {
-                    // Summary Cards
-                    HStack(spacing: 16) {
-                        StatCard(
-                            title: "Total Quizzes",
-                            value: "\(attempts.count)",
-                            icon: "checklist",
-                            color: .elianBlue
-                        )
-                        
-                        StatCard(
-                            title: "Average Score",
-                            value: "\(Int(averageScore * 100))%",
-                            icon: "percent",
-                            color: averageScore >= 0.7 ? .elianSuccess : .elianWarning
-                        )
-                    }
-                    .padding(.horizontal, 24)
-                    
-                    // Chart
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Recent Performance (Last 10)")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.elianTextSecondary)
-                        
-                        Chart {
-                            ForEach(Array(recentAttempts.enumerated()), id: \.offset) { index, attempt in
-                                let percentage = Double(attempt.score) / Double(max(1, attempt.totalQuestions)) * 100
-                                
-                                LineMark(
-                                    x: .value("Attempt", index + 1),
-                                    y: .value("Score %", percentage)
-                                )
-                                .lineStyle(StrokeStyle(lineWidth: 3))
-                                .foregroundStyle(Color(hex: folder.accentColorHex))
-                                
-                                PointMark(
-                                    x: .value("Attempt", index + 1),
-                                    y: .value("Score %", percentage)
-                                )
-                                .foregroundStyle(.elianSurface)
-                                .symbolSize(100)
-                                
-                                PointMark(
-                                    x: .value("Attempt", index + 1),
-                                    y: .value("Score %", percentage)
-                                )
-                                .foregroundStyle(Color(hex: folder.accentColorHex))
-                                .symbolSize(40)
-                            }
-                        }
-                        .chartYAxis {
-                            AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
-                                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5)).foregroundStyle(.elianBorder)
-                                AxisValueLabel {
-                                    if let intValue = value.as(Int.self) {
-                                        Text("\(intValue)%")
-                                            .font(.system(size: 10))
-                                            .foregroundStyle(.elianTextTertiary)
-                                    }
-                                }
-                            }
-                        }
-                        .chartXAxis(.hidden)
-                        .frame(height: 240)
-                    }
-                    .padding(24)
-                    .background(Color.elianSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.elianBorder, lineWidth: 1)
-                    )
-                    .padding(.horizontal, 24)
+                    dataSection
                 }
             }
             .padding(.vertical, 24)
@@ -126,6 +38,129 @@ struct AnalyticsDashboardView: View {
         .background(Color.elianBackground)
         .navigationTitle("Analytics")
         .navigationBarTitleDisplayMode(.inline)
+    }
+    
+    // MARK: - Header
+    
+    private var headerSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Study Analytics")
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(.elianTextPrimary)
+            
+            Text(folder.name)
+                .font(.system(size: 16))
+                .foregroundStyle(Color(hex: folder.accentColorHex))
+        }
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Empty State
+    
+    private var emptySection: some View {
+        EmptyStudyView(
+            icon: "chart.line.uptrend.xyaxis",
+            title: "No Data Yet",
+            subtitle: "Complete quizzes in this folder to see your performance over time.",
+            color: Color(hex: folder.accentColorHex)
+        )
+        .frame(height: 300)
+    }
+    
+    // MARK: - Data Section
+    
+    private var dataSection: some View {
+        VStack(alignment: .leading, spacing: 24) {
+            summaryCards
+            chartSection
+        }
+    }
+    
+    // MARK: - Summary Cards
+    
+    private var summaryCards: some View {
+        HStack(spacing: 16) {
+            StatCard(
+                title: "Total Quizzes",
+                value: "\(attempts.count)",
+                icon: "checklist",
+                color: .elianBlue
+            )
+            
+            StatCard(
+                title: "Average Score",
+                value: "\(Int(averageScore * 100))%",
+                icon: "percent",
+                color: averageScore >= 0.7 ? .elianSuccess : .elianWarning
+            )
+        }
+        .padding(.horizontal, 24)
+    }
+    
+    // MARK: - Chart
+    
+    private var chartSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Recent Performance (Last 10)")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.elianTextSecondary)
+            
+            performanceChart
+                .frame(height: 240)
+        }
+        .padding(24)
+        .background(Color.elianSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.elianBorder, lineWidth: 1)
+        )
+        .padding(.horizontal, 24)
+    }
+    
+    private var performanceChart: some View {
+        let accentColor = Color(hex: folder.accentColorHex)
+        let chartData: [(index: Int, percentage: Double)] = recentAttempts.enumerated().map { index, attempt in
+            let pct = Double(attempt.score) / Double(max(1, attempt.totalQuestions)) * 100
+            return (index: index + 1, percentage: pct)
+        }
+        
+        return Chart(chartData, id: \.index) { item in
+            LineMark(
+                x: .value("Attempt", item.index),
+                y: .value("Score %", item.percentage)
+            )
+            .lineStyle(StrokeStyle(lineWidth: 3))
+            .foregroundStyle(accentColor)
+            
+            PointMark(
+                x: .value("Attempt", item.index),
+                y: .value("Score %", item.percentage)
+            )
+            .foregroundStyle(Color.elianSurface)
+            .symbolSize(100)
+            
+            PointMark(
+                x: .value("Attempt", item.index),
+                y: .value("Score %", item.percentage)
+            )
+            .foregroundStyle(accentColor)
+            .symbolSize(40)
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading, values: [0, 25, 50, 75, 100]) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5))
+                    .foregroundStyle(Color.elianBorder)
+                AxisValueLabel {
+                    if let intValue = value.as(Int.self) {
+                        Text("\(intValue)%")
+                            .font(.system(size: 10))
+                            .foregroundStyle(Color.elianTextTertiary)
+                    }
+                }
+            }
+        }
+        .chartXAxis(.hidden)
     }
 }
 
