@@ -41,7 +41,6 @@ jobs:
           -destination 'generic/platform=iOS' \
           -configuration Release \
           -derivedDataPath build \
-          -arch arm64 \
           CODE_SIGNING_ALLOWED=NO \
           CODE_SIGN_IDENTITY="-" \
           AD_HOC_CODE_SIGNING_ALLOWED=YES \
