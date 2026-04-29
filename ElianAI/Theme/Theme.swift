@@ -31,6 +31,30 @@ extension Color {
     static let elianBorderLight = Color(hex: "#3A3A4A")
 }
 
+extension ShapeStyle where Self == Color {
+    static var elianBackground: Color { Color.elianBackground }
+    static var elianSurface: Color { Color.elianSurface }
+    static var elianSurfaceSecondary: Color { Color.elianSurfaceSecondary }
+    static var elianSurfaceTertiary: Color { Color.elianSurfaceTertiary }
+    
+    static var elianBlue: Color { Color.elianBlue }
+    static var elianPurple: Color { Color.elianPurple }
+    static var elianGreen: Color { Color.elianGreen }
+    static var elianOrange: Color { Color.elianOrange }
+    static var elianPink: Color { Color.elianPink }
+    
+    static var elianTextPrimary: Color { Color.elianTextPrimary }
+    static var elianTextSecondary: Color { Color.elianTextSecondary }
+    static var elianTextTertiary: Color { Color.elianTextTertiary }
+    
+    static var elianSuccess: Color { Color.elianSuccess }
+    static var elianError: Color { Color.elianError }
+    static var elianWarning: Color { Color.elianWarning }
+    
+    static var elianBorder: Color { Color.elianBorder }
+    static var elianBorderLight: Color { Color.elianBorderLight }
+}
+
 // MARK: - Hex Color Initializer
 
 extension Color {
