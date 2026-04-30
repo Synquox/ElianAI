@@ -47,11 +47,14 @@ final class SupabaseService {
         isLoading = true
         defer { isLoading = false }
         
-        // Build the OAuth URL and open it in the system browser
-        let url = try client.auth.getOAuthSignInURL(
-            provider: .google,
-            redirectTo: URL(string: "elianai://auth/callback")
-        )
+        // Build the OAuth URL on the auth client's isolation domain
+        let authClient = client.auth
+        let url = try await Task.detached {
+            try authClient.getOAuthSignInURL(
+                provider: .google,
+                redirectTo: URL(string: "elianai://auth/callback")
+            )
+        }.value
         
         await UIApplication.shared.open(url)
     }
