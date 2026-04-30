@@ -310,8 +310,8 @@ struct FlashcardView: View {
                 // 3-grade system: Didn't Know / Partially / Knew It
                 HStack(spacing: 8) {
                     GradeButton(label: "❌ Didn't Know", color: .elianError) { gradeCard(0) }
-                    GradeButton(label: "🤔 Partially", color: .elianOrange) { gradeCard(2) }
-                    GradeButton(label: "✅ Knew It", color: .elianGreen) { gradeCard(3) }
+                    GradeButton(label: "🤔 Partially", color: .elianOrange) { gradeCard(1) }
+                    GradeButton(label: "✅ Knew It", color: .elianGreen) { gradeCard(2) }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
@@ -452,8 +452,8 @@ struct FlashcardView: View {
         let threshold: CGFloat = 100
         
         if gesture.translation.width > threshold {
-            // Swipe right = Knew It (3)
-            gradeCard(3)
+            // Swipe right = Knew It (2)
+            gradeCard(2)
         } else if gesture.translation.width < -threshold {
             // Swipe left = Didn't Know (0)
             gradeCard(0)
