@@ -311,6 +311,13 @@ final class BackgroundSyncService {
         UNUserNotificationCenter.current().add(request)
     }
     
+    /// Request notification permissions
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if let error = error {
+                print("Notification permission error: \(error)")
+            }
+        }
     }
     
     // MARK: - Auto Reminder Scheduling

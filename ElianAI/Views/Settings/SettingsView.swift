@@ -662,28 +662,27 @@ struct SettingsView: View {
         case .success(let urls):
             guard let url = urls.first else { return }
             guard url.startAccessingSecurityScopedResource() else { return }
-            defer { url.stopAccessingSecurityScopedResource() }
             
             isAddingTextbook = true
             
-            Task {
-                do {
-                    let data = try Data(contentsOf: url)
-                    let title = url.deletingPathExtension().lastPathComponent
-                    
+            do {
+                let data = try Data(contentsOf: url)
+                url.stopAccessingSecurityScopedResource()
+                let title = url.deletingPathExtension().lastPathComponent
+                
+                Task {
                     await MainActor.run {
                         let newTextbook = Textbook(title: title, pdfData: data)
                         modelContext.insert(newTextbook)
                         isAddingTextbook = false
                         HapticEngine.notification(.success)
                     }
-                } catch {
-                    await MainActor.run {
-                        isAddingTextbook = false
-                        errorMessage = "Failed to load PDF: \(error.localizedDescription)"
-                        showError = true
-                    }
                 }
+            } catch {
+                url.stopAccessingSecurityScopedResource()
+                isAddingTextbook = false
+                errorMessage = "Failed to load PDF: \(error.localizedDescription)"
+                showError = true
             }
             
         case .failure(let error):
