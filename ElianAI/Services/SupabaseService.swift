@@ -32,44 +32,37 @@ final class SupabaseService {
     private func restoreSession() async {
         do {
             let session = try await client.auth.session
-            await MainActor.run {
-                currentUser = session.user
-                isSignedIn = true
-            }
+            currentUser = session.user
+            isSignedIn = true
         } catch {
-            await MainActor.run {
-                currentUser = nil
-                isSignedIn = false
-            }
+            currentUser = nil
+            isSignedIn = false
         }
     }
     
     // MARK: - Google Sign-In via Supabase OAuth
     
-    /// Sign in with Google using Supabase's built-in OAuth flow
-    @MainActor
+    /// Sign in with Google using Supabase's OAuth flow (opens browser)
     func signInWithGoogle() async throws {
         isLoading = true
         defer { isLoading = false }
         
-        // Use Supabase's OAuth which opens a browser for Google login
-        try await client.auth.signInWithOAuth(
+        // Build the OAuth URL and open it in the system browser
+        let url = try client.auth.getOAuthSignInURL(
             provider: .google,
             redirectTo: URL(string: "elianai://auth/callback")
         )
         
-        // After OAuth redirect, refresh session
-        try await refreshSession()
+        await UIApplication.shared.open(url)
     }
     
     /// Handle the OAuth callback URL (from deep link)
     func handleAuthCallback(url: URL) async throws {
         try await client.auth.session(from: url)
-        await refreshSession()
+        try await refreshSession()
     }
     
     /// Refresh and sync the current session state
-    @MainActor
     private func refreshSession() async throws {
         let session = try await client.auth.session
         currentUser = session.user
@@ -78,7 +71,6 @@ final class SupabaseService {
     
     // MARK: - Sign Out
     
-    @MainActor
     func signOut() async throws {
         isLoading = true
         defer { isLoading = false }
@@ -105,7 +97,7 @@ final class SupabaseService {
                 "local_id": entry.id.uuidString
             ]
             
-            try await client.from("homework")
+            try await client.database.from("homework")
                 .upsert(payload, onConflict: "local_id, user_id")
                 .execute()
         }
@@ -115,7 +107,7 @@ final class SupabaseService {
     func fetchHomeworkFromCloud() async throws -> [[String: Any]] {
         guard isSignedIn, let userId = currentUser?.id.uuidString else { return [] }
         
-        let response = try await client.from("homework")
+        let response = try await client.database.from("homework")
             .select()
             .eq("user_id", value: userId)
             .execute()

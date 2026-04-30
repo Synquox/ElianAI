@@ -74,7 +74,7 @@ final class BackgroundSyncService {
         }
         
         Task {
-            _ = try? await syncTask.value
+            _ = await syncTask.value
             task.setTaskCompleted(success: true)
         }
     }
@@ -91,7 +91,7 @@ final class BackgroundSyncService {
     
     /// The main sync routine: scan today's + yesterday's subjects for homework
     private func performSync(modelContext: ModelContext? = nil) async {
-        let logineo = LogineoService.shared
+        let logineo = await MainActor.run { LogineoService.shared }
         
         guard KeychainService.shared.hasLogineoCredentials else { return }
         

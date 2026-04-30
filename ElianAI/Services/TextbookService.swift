@@ -68,7 +68,31 @@ final class TextbookService {
     
     /// Parse page references from homework description text
     func parsePageReferences(from text: String) -> [Int] {
-        LogineoService.shared.parsePageReferences(from: text)
+        var pages: [Int] = []
+        
+        let patterns = [
+            "S\\.\\s*(\\d+)",           // S. 45
+            "Seite\\s*(\\d+)",          // Seite 12
+            "p\\.\\s*(\\d+)",           // p. 7
+            "page\\s*(\\d+)",           // page 7
+            "Aufgabe\\s*(\\d+)",        // Aufgabe 3
+            "Nr\\.\\s*(\\d+)"           // Nr. 5
+        ]
+        
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) {
+                let range = NSRange(text.startIndex..., in: text)
+                let matches = regex.matches(in: text, range: range)
+                for match in matches {
+                    if let numRange = Range(match.range(at: 1), in: text),
+                       let num = Int(text[numRange]) {
+                        pages.append(num)
+                    }
+                }
+            }
+        }
+        
+        return Array(Set(pages)).sorted()
     }
     
     // MARK: - Solver Prompt Generation
