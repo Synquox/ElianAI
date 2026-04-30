@@ -1,5 +1,27 @@
 import SwiftUI
 
+/// Utility for app-wide theme constants and helpers
+enum Theme {
+    static let subjectColors = [
+        "#4A9EFF", "#A855F7", "#34D399", "#FB923C",
+        "#F472B6", "#EF4444", "#F59E0B", "#06B6D4"
+    ]
+    
+    static let subjectIcons = [
+        "book.fill", "flask.fill", "function", "globe.americas.fill",
+        "paintpalette.fill", "music.note", "cpu.fill", "heart.fill",
+        "star.fill", "bolt.fill", "leaf.fill", "graduationcap.fill"
+    ]
+    
+    static func randomColor() -> String {
+        subjectColors.randomElement() ?? "#4A9EFF"
+    }
+    
+    static func randomIcon() -> String {
+        subjectIcons.randomElement() ?? "book.fill"
+    }
+}
+
 // MARK: - Color Palette
 
 extension Color {

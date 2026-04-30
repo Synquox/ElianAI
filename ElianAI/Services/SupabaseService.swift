@@ -88,19 +88,6 @@ final class SupabaseService {
             session.start()
         }
     }
-}
-
-/// Helper for ASWebAuthenticationSession presentation
-class AuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
-    static let shared = AuthPresentationContext()
-    
-    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-              let window = scene.windows.first else {
-            return ASPresentationAnchor()
-        }
-        return window
-    }
     
     /// Handle the OAuth callback URL (from deep link)
     func handleAuthCallback(url: URL) async throws {
@@ -143,9 +130,8 @@ class AuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextP
                 "local_id": entry.id.uuidString
             ]
             
-            try await client.database.from("homework")
+            try await client.from("homework")
                 .upsert(payload, onConflict: "local_id, user_id")
-                .execute()
         }
     }
     
@@ -153,10 +139,9 @@ class AuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextP
     func fetchHomeworkFromCloud() async throws -> [[String: Any]] {
         guard isSignedIn, let userId = currentUser?.id.uuidString else { return [] }
         
-        let response = try await client.database.from("homework")
+        let response = try await client.from("homework")
             .select()
             .eq("user_id", value: userId)
-            .execute()
         
         // Return raw data for the caller to process
         guard let json = try? JSONSerialization.jsonObject(with: response.data) as? [[String: Any]] else {
@@ -182,5 +167,19 @@ class AuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextP
             return nil
         }
         return URL(string: urlString)
+    }
+}
+
+/// Helper for ASWebAuthenticationSession presentation
+@MainActor
+class AuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let shared = AuthPresentationContext()
+    
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            return ASPresentationAnchor()
+        }
+        return window
     }
 }
