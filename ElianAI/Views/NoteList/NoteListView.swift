@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import PhotosUI
 
 struct NoteListView: View {
     @Environment(\.modelContext) private var modelContext
@@ -11,6 +12,10 @@ struct NoteListView: View {
     
     @State private var showNewNoteSheet = false
     @State private var showPDFPicker = false
+    @State private var showDOCXPicker = false
+    @State private var showPPTPicker = false
+    @State private var showImagePicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var inputText = ""
     @State private var isGenerating = false
     @State private var errorMessage: String?
@@ -80,6 +85,24 @@ struct NoteListView: View {
                         } label: {
                             Label("From PDF", systemImage: "doc.fill")
                         }
+                        
+                        Button {
+                            showDOCXPicker = true
+                        } label: {
+                            Label("From DOCX", systemImage: "doc.richtext.fill")
+                        }
+                        
+                        Button {
+                            showPPTPicker = true
+                        } label: {
+                            Label("From PowerPoint", systemImage: "rectangle.stack.fill")
+                        }
+                        
+                        Button {
+                            showImagePicker = true
+                        } label: {
+                            Label("From Image (OCR)", systemImage: "photo.fill")
+                        }
                     } label: {
                         Image(systemName: "plus.circle.fill")
                             .font(.system(size: 20))
@@ -95,6 +118,22 @@ struct NoteListView: View {
                 allowedContentTypes: [UTType.pdf]
             ) { result in
                 handlePDFImport(result)
+            }
+            .fileImporter(
+                isPresented: $showDOCXPicker,
+                allowedContentTypes: [UTType(filenameExtension: "docx")].compactMap { $0 }
+            ) { result in
+                handleDOCXImport(result)
+            }
+            .fileImporter(
+                isPresented: $showPPTPicker,
+                allowedContentTypes: [UTType(filenameExtension: "pptx")].compactMap { $0 }
+            ) { result in
+                handlePPTImport(result)
+            }
+            .photosPicker(isPresented: $showImagePicker, selection: $selectedPhotoItem, matching: .images)
+            .onChange(of: selectedPhotoItem) { _, newValue in
+                handleImageImport(newValue)
             }
             
             // Loading overlay
@@ -253,9 +292,93 @@ struct NoteListView: View {
         }
     }
     
+    private func handleDOCXImport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            guard url.startAccessingSecurityScopedResource() else { return }
+            defer { url.stopAccessingSecurityScopedResource() }
+            
+            guard let data = try? Data(contentsOf: url),
+                  let text = TextbookService.shared.extractTextFromDOCX(data: data) else {
+                errorMessage = "Could not extract text from DOCX file."
+                return
+            }
+            
+            inputText = text
+            showNewNoteSheet = true
+            
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    private func handlePPTImport(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            guard url.startAccessingSecurityScopedResource() else { return }
+            defer { url.stopAccessingSecurityScopedResource() }
+            
+            guard let data = try? Data(contentsOf: url),
+                  let text = TextbookService.shared.extractTextFromPPTX(data: data) else {
+                errorMessage = "Could not extract text from PowerPoint file."
+                return
+            }
+            
+            inputText = text
+            showNewNoteSheet = true
+            
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+        }
+    }
+    
+    private func handleImageImport(_ item: PhotosPickerItem?) {
+        guard let item = item else { return }
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                await MainActor.run {
+                    errorMessage = "Could not load image."
+                }
+                return
+            }
+            
+            await MainActor.run {
+                // For image OCR, we'll send the image directly to Gemini for text extraction
+                isGenerating = true
+                errorMessage = nil
+            }
+            
+            do {
+                let text = try await geminiService.extractTextFromImage(imageData: data)
+                await MainActor.run {
+                    inputText = text
+                    isGenerating = false
+                    showNewNoteSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    isGenerating = false
+                    errorMessage = "OCR failed: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+    
     private func deleteNote(_ note: NoteModel) {
         if selectedNote == note { selectedNote = nil }
         modelContext.delete(note)
+    }
+}
+
+// MARK: - Helper
+
+private func noteSourceIcon(_ type: SourceType) -> String {
+    switch type {
+    case .text: return "text.cursor"
+    case .pdf: return "doc.fill"
+    case .docx: return "doc.richtext.fill"
+    case .ppt: return "rectangle.stack.fill"
+    case .image: return "photo.fill"
     }
 }
 
@@ -268,7 +391,7 @@ struct NoteRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: note.sourceType == .pdf ? "doc.fill" : "text.cursor")
+                Image(systemName: noteSourceIcon(note.sourceType))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color(hex: folderColor))
                 

@@ -55,5 +55,25 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.synquox.ElianAI.homework-sync</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.synquox.ElianAI</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>elianai</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

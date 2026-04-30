@@ -1,13 +1,17 @@
 import Foundation
 import GoogleGenerativeAI
 import PDFKit
+import UserNotifications
 
-@Observable
+@MainActor @Observable
 final class GeminiService {
     static let shared = GeminiService()
     
     private(set) var isLoading = false
     private(set) var currentModel: GeminiModelOption = .flash
+    
+    /// Tracks current retry state for UI display
+    private(set) var retryStatus: RetryStatus = .idle
     
     private var _cachedModel: GenerativeModel?
     private var _cachedModelKey: String?
@@ -93,7 +97,9 @@ final class GeminiService {
         \(text)
         """
         
-        let response = try await model.generateContent(prompt)
+        let response = try await withRetry(taskName: "Study Material Generation") {
+            try await model.generateContent(prompt)
+        }
         
         guard let responseText = response.text else {
             throw GeminiError.emptyResponse
@@ -148,7 +154,9 @@ final class GeminiService {
         
         conversationParts += "\nUSER: \(userMessage)\nASSISTANT:"
         
-        let response = try await model.generateContent(conversationParts)
+        let response = try await withRetry(taskName: "Chat") {
+            try await model.generateContent(conversationParts)
+        }
         
         guard let text = response.text else {
             throw GeminiError.emptyResponse
@@ -173,6 +181,30 @@ final class GeminiService {
         return fullText.isEmpty ? nil : fullText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
     
+    // MARK: - Image OCR
+    
+    /// Extract text from an image using Gemini's multimodal capabilities
+    func extractTextFromImage(imageData: Data) async throws -> String {
+        guard let model = generativeModel else {
+            throw GeminiError.noAPIKey
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        let prompt = "Extract all text from this image. Return only the raw text content, preserving the original structure and formatting as much as possible. If there are mathematical formulas, write them in LaTeX notation."
+        
+        let response = try await withRetry(taskName: "Image OCR") {
+            try await model.generateContent(prompt, ModelContent.Part.data(mimetype: "image/jpeg", imageData))
+        }
+        
+        guard let text = response.text, !text.isEmpty else {
+            throw GeminiError.emptyResponse
+        }
+        
+        return text
+    }
+    
     // MARK: - Validate API Key
     
     func validateAPIKey(_ key: String) async -> Bool {
@@ -186,6 +218,128 @@ final class GeminiService {
     }
 }
 
+// MARK: - Retry Logic
+
+extension GeminiService {
+    /// Maximum number of retries before giving up
+    private static let maxRetries = 3
+    /// Base delay in seconds (doubles each retry: 30s, 60s, 120s)
+    private static let baseDelay: TimeInterval = 30
+    
+    /// Execute an API call with automatic retry on rate-limit/quota errors
+    private func withRetry<T>(
+        taskName: String,
+        attempt: Int = 1,
+        operation: () async throws -> T
+    ) async throws -> T {
+        do {
+            let result = try await operation()
+            // Success — clear retry status
+            retryStatus = .idle
+            return result
+        } catch {
+            let isRetryable = Self.isRetryableError(error)
+            
+            if isRetryable && attempt <= Self.maxRetries {
+                let delay = Self.baseDelay * pow(2.0, Double(attempt - 1)) // 30s, 60s, 120s
+                let retryAt = Date().addingTimeInterval(delay)
+                
+                // Update UI status
+                retryStatus = .waiting(
+                    attempt: attempt,
+                    maxAttempts: Self.maxRetries,
+                    retryAt: retryAt,
+                    taskName: taskName
+                )
+                
+                // Send local notification
+                sendRetryNotification(
+                    taskName: taskName,
+                    attempt: attempt,
+                    delaySeconds: Int(delay),
+                    errorDescription: error.localizedDescription
+                )
+                
+                // Wait
+                try await Task.sleep(for: .seconds(delay))
+                
+                // Retry
+                return try await withRetry(
+                    taskName: taskName,
+                    attempt: attempt + 1,
+                    operation: operation
+                )
+            } else {
+                retryStatus = .failed(error.localizedDescription)
+                
+                if isRetryable {
+                    // All retries exhausted
+                    sendFailureNotification(taskName: taskName)
+                    throw GeminiError.rateLimitExhausted
+                }
+                throw error
+            }
+        }
+    }
+    
+    /// Detect if an error is a rate-limit, quota, or temporary server issue worth retrying
+    private static func isRetryableError(_ error: Error) -> Bool {
+        let desc = error.localizedDescription.lowercased()
+        let retryableKeywords = [
+            "rate limit", "quota", "resource exhausted",
+            "429", "503", "500", "too many requests",
+            "temporarily unavailable", "overloaded",
+            "resourceexhausted", "internal"
+        ]
+        return retryableKeywords.contains { desc.contains($0) }
+    }
+    
+    // MARK: - Notifications
+    
+    private func sendRetryNotification(taskName: String, attempt: Int, delaySeconds: Int, errorDescription: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "ElianAI — Retrying \(taskName)"
+        content.body = "API limit hit. Retrying in \(delaySeconds/60) min (attempt \(attempt)/\(Self.maxRetries)). You can keep the app open or come back later."
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "gemini-retry-\(attempt)",
+            content: content,
+            trigger: trigger
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+    
+    private func sendFailureNotification(taskName: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "ElianAI — \(taskName) Failed"
+        content.body = "Could not complete after \(Self.maxRetries) retries. The API may be temporarily unavailable. Please try again later."
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "gemini-failure",
+            content: content,
+            trigger: trigger
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+}
+
+// MARK: - Retry Status
+
+enum RetryStatus: Equatable {
+    case idle
+    case waiting(attempt: Int, maxAttempts: Int, retryAt: Date, taskName: String)
+    case failed(String)
+    
+    var isRetrying: Bool {
+        if case .waiting = self { return true }
+        return false
+    }
+}
+
 // MARK: - Errors
 
 enum GeminiError: LocalizedError {
@@ -193,6 +347,7 @@ enum GeminiError: LocalizedError {
     case emptyResponse
     case invalidJSON
     case decodingFailed(String)
+    case rateLimitExhausted
     
     var errorDescription: String? {
         switch self {
@@ -204,6 +359,8 @@ enum GeminiError: LocalizedError {
             return "Failed to parse the AI response. Please try again."
         case .decodingFailed(let detail):
             return "Response decoding failed: \(detail)"
+        case .rateLimitExhausted:
+            return "API rate limit exceeded after multiple retries. Please wait a few minutes and try again."
         }
     }
 }

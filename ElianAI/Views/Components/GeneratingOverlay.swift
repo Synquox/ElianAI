@@ -7,7 +7,6 @@ struct GeneratingOverlay: View {
     @State private var rotation: Double = 0
     @State private var pulseScale: CGFloat = 1.0
     @State private var currentPhase = 0
-    @State private var phaseTimer: Timer?
     
     private let phases = [
         ("📝", "Analyzing your content..."),
@@ -79,6 +78,31 @@ struct GeneratingOverlay: View {
                             .scaleEffect(index == currentPhase ? 1.3 : 1.0)
                     }
                 }
+                
+                // Retry status banner
+                if case .waiting(let attempt, let maxAttempts, let retryAt, let taskName) = GeminiService.shared.retryStatus {
+                    VStack(spacing: 8) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.elianWarning)
+                            Text("API Rate Limited")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.elianWarning)
+                        }
+                        
+                        Text("Retry \(attempt)/\(maxAttempts) for \(taskName)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.elianTextSecondary)
+                        
+                        Text("Retrying at \(retryAt.formatted(date: .omitted, time: .shortened))")
+                            .font(.system(size: 13, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.elianTextPrimary)
+                    }
+                    .padding(14)
+                    .background(Color.elianWarning.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
             }
             .padding(40)
             .background(Color.elianSurface)
@@ -96,16 +120,16 @@ struct GeneratingOverlay: View {
             withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
                 pulseScale = 1.15
             }
-            // Cycle through phases
-            phaseTimer = Timer.scheduledTimer(withTimeInterval: 2.5, repeats: true) { _ in
+        }
+        .task {
+            // Automatically cancelled when the view disappears
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(2.5))
+                guard !Task.isCancelled else { break }
                 withAnimation(.spring(duration: 0.4)) {
                     currentPhase = (currentPhase + 1) % phases.count
                 }
             }
-        }
-        .onDisappear {
-            phaseTimer?.invalidate()
-            phaseTimer = nil
         }
     }
 }

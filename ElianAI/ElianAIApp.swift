@@ -4,12 +4,25 @@ import SwiftData
 @main
 struct ElianAIApp: App {
     @State private var geminiService = GeminiService.shared
+    @State private var supabaseService = SupabaseService.shared
+    
+    init() {
+        BackgroundSyncService.shared.registerBackgroundTasks()
+        BackgroundSyncService.shared.requestNotificationPermission()
+    }
     
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(geminiService)
+                .environment(supabaseService)
                 .preferredColorScheme(.dark)
+                .onOpenURL { url in
+                    // Handle Supabase OAuth callback
+                    Task {
+                        try? await supabaseService.handleAuthCallback(url: url)
+                    }
+                }
         }
         .modelContainer(for: [
             FolderModel.self,
@@ -17,7 +30,15 @@ struct ElianAIApp: App {
             QuizQuestion.self,
             QuizAttempt.self,
             Flashcard.self,
-            ChatMessage.self
+            ChatMessage.self,
+            Subject.self,
+            TimetablePeriod.self,
+            TimetableConfig.self,
+            HomeworkEntry.self,
+            HomeworkAttachment.self,
+            SeenCourseFile.self,
+            Textbook.self,
+            MoodleMessageEntry.self
         ])
     }
 }
@@ -34,3 +55,4 @@ struct RootView: View {
         }
     }
 }
+

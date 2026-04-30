@@ -4,7 +4,7 @@ import SwiftData
 struct SidebarView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \FolderModel.createdAt, order: .reverse) private var folders: [FolderModel]
-    @Binding var selectedFolder: FolderModel?
+    @Binding var selectedDestination: SidebarDestination?
     
     @State private var showAddFolder = false
     @State private var showEditFolder = false
@@ -26,10 +26,53 @@ struct SidebarView: View {
     ]
     
     var body: some View {
-        List(selection: $selectedFolder) {
+        List(selection: $selectedDestination) {
+            // MARK: - School Section
+            Section {
+                sidebarItem(
+                    destination: .timetable,
+                    icon: "calendar",
+                    label: "Timetable",
+                    color: .elianBlue
+                )
+                
+                sidebarItem(
+                    destination: .homework,
+                    icon: "checklist",
+                    label: "Homework",
+                    color: .elianGreen
+                )
+                
+                sidebarItem(
+                    destination: .substitutionPlan,
+                    icon: "doc.text.magnifyingglass",
+                    label: "Vertretungsplan",
+                    color: .elianPurple
+                )
+                
+                sidebarItem(
+                    destination: .messages,
+                    icon: "envelope.fill",
+                    label: "Messages",
+                    color: .elianOrange
+                )
+                
+                sidebarItem(
+                    destination: .textbooks,
+                    icon: "text.book.closed.fill",
+                    label: "Textbooks",
+                    color: .elianPink
+                )
+            } header: {
+                Text("SCHOOL")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.elianTextTertiary)
+            }
+            
+            // MARK: - Study Hub Section
             Section {
                 ForEach(folders) { folder in
-                    NavigationLink(value: folder) {
+                    NavigationLink(value: SidebarDestination.folder(folder)) {
                         HStack(spacing: 12) {
                             Image(systemName: folder.icon)
                                 .font(.system(size: 16, weight: .semibold))
@@ -70,7 +113,7 @@ struct SidebarView: View {
                 }
             } header: {
                 HStack {
-                    Text("FOLDERS")
+                    Text("STUDY HUB")
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(.elianTextTertiary)
                     
@@ -82,6 +125,20 @@ struct SidebarView: View {
                             .foregroundStyle(.elianBlue)
                     }
                 }
+            }
+            
+            // MARK: - Logineo Status
+            Section {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(KeychainService.shared.hasLogineoCredentials ? Color.elianSuccess : Color.elianTextTertiary)
+                        .frame(width: 8, height: 8)
+                    
+                    Text(KeychainService.shared.hasLogineoCredentials ? "Logineo Connected" : "Logineo Not Configured")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.elianTextTertiary)
+                }
+                .padding(.vertical, 4)
             }
         }
         .listStyle(.sidebar)
@@ -110,6 +167,26 @@ struct SidebarView: View {
         }
         .sheet(isPresented: $showSettings) {
             SettingsView()
+        }
+    }
+    
+    // MARK: - Sidebar Item Helper
+    
+    private func sidebarItem(destination: SidebarDestination, icon: String, label: String, color: Color) -> some View {
+        NavigationLink(value: destination) {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(color)
+                    .frame(width: 32, height: 32)
+                    .background(color.opacity(0.15))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                
+                Text(label)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(.elianTextPrimary)
+            }
+            .padding(.vertical, 4)
         }
     }
     
@@ -225,7 +302,7 @@ struct SidebarView: View {
             accentColorHex: selectedColor
         )
         modelContext.insert(folder)
-        selectedFolder = folder
+        selectedDestination = .folder(folder)
         showAddFolder = false
         HapticEngine.notification(.success)
         resetForm()
@@ -243,7 +320,9 @@ struct SidebarView: View {
     }
     
     private func deleteFolder(_ folder: FolderModel) {
-        if selectedFolder == folder { selectedFolder = nil }
+        if case .folder(let selected) = selectedDestination, selected == folder {
+            selectedDestination = nil
+        }
         modelContext.delete(folder)
         HapticEngine.notification(.warning)
     }
@@ -254,4 +333,3 @@ struct SidebarView: View {
         selectedIcon = "folder.fill"
     }
 }
-

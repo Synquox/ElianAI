@@ -1,40 +1,37 @@
 import SwiftUI
 import SwiftData
 
+// MARK: - Navigation Destination Enum
+
+enum SidebarDestination: Hashable {
+    case timetable
+    case homework
+    case substitutionPlan
+    case messages
+    case textbooks
+    case folder(FolderModel)
+}
+
 struct ContentView: View {
-    @State private var selectedFolder: FolderModel?
+    @State private var selectedDestination: SidebarDestination?
     @State private var selectedNote: NoteModel?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showSearch = false
     
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SidebarView(selectedFolder: $selectedFolder)
+            SidebarView(selectedDestination: $selectedDestination)
                 .navigationSplitViewColumnWidth(min: 220, ideal: 260)
         } content: {
             if showSearch {
                 SearchView(selectedNote: $selectedNote)
                     .navigationSplitViewColumnWidth(min: 280, ideal: 320)
-            } else if let folder = selectedFolder {
-                NoteListView(folder: folder, selectedNote: $selectedNote)
-                    .navigationSplitViewColumnWidth(min: 280, ideal: 320)
             } else {
-                EmptyColumnView(
-                    icon: "folder.fill",
-                    title: "Select a Folder",
-                    subtitle: "Choose a folder from the sidebar to view your notes"
-                )
+                contentColumn
+                    .navigationSplitViewColumnWidth(min: 280, ideal: 320)
             }
         } detail: {
-            if let note = selectedNote {
-                NoteDetailView(note: note)
-            } else {
-                EmptyColumnView(
-                    icon: "doc.text.fill",
-                    title: "Select a Note",
-                    subtitle: "Choose a note to start studying"
-                )
-            }
+            detailColumn
         }
         .navigationSplitViewStyle(.balanced)
         .tint(.elianBlue)
@@ -44,7 +41,7 @@ struct ContentView: View {
                     withAnimation(.spring(duration: 0.3)) {
                         showSearch.toggle()
                         if showSearch {
-                            selectedFolder = nil
+                            selectedDestination = nil
                         }
                     }
                 } label: {
@@ -53,6 +50,47 @@ struct ContentView: View {
                         .foregroundStyle(showSearch ? .elianOrange : .elianTextSecondary)
                 }
             }
+        }
+    }
+    
+    // MARK: - Content Column
+    
+    @ViewBuilder
+    private var contentColumn: some View {
+        switch selectedDestination {
+        case .timetable:
+            TimetableView()
+        case .homework:
+            HomeworkView()
+        case .substitutionPlan:
+            SubstitutionPlanView()
+        case .messages:
+            MessageCenterView()
+        case .textbooks:
+            TextbookView()
+        case .folder(let folder):
+            NoteListView(folder: folder, selectedNote: $selectedNote)
+        case nil:
+            EmptyColumnView(
+                icon: "sidebar.left",
+                title: "ElianAI",
+                subtitle: "Choose an item from the sidebar to get started"
+            )
+        }
+    }
+    
+    // MARK: - Detail Column
+    
+    @ViewBuilder
+    private var detailColumn: some View {
+        if let note = selectedNote {
+            NoteDetailView(note: note)
+        } else {
+            EmptyColumnView(
+                icon: "doc.text.fill",
+                title: "Select a Note",
+                subtitle: "Choose a note to start studying"
+            )
         }
     }
 }

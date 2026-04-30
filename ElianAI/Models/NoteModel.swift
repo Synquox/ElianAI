@@ -4,6 +4,9 @@ import SwiftData
 enum SourceType: String, Codable {
     case text
     case pdf
+    case docx
+    case ppt
+    case image
 }
 
 @Model

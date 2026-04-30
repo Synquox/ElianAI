@@ -13,6 +13,9 @@ xcuserdata/
 !default.mode2v3
 !default.perspectivev3
 
+# XcodeGen — generated project, do not commit
+*.xcodeproj
+
 # Build
 build/
 DerivedData/

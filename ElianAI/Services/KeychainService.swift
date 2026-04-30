@@ -5,6 +5,9 @@ final class KeychainService {
     static let shared = KeychainService()
     
     private let apiKeyAccount = "com.elianai.gemini-api-key"
+    private let logineoUsernameAccount = "com.elianai.logineo-username"
+    private let logineoPasswordAccount = "com.elianai.logineo-password"
+    private let logineoURLKey = "com.elianai.logineo-url"
     private let service = "ElianAI"
     
     private init() {}
@@ -24,6 +27,46 @@ final class KeychainService {
     
     var hasAPIKey: Bool {
         apiKey != nil && !(apiKey?.isEmpty ?? true)
+    }
+    
+    // MARK: - Logineo Credentials
+    
+    var logineoUsername: String? {
+        get { read(account: logineoUsernameAccount) }
+        set {
+            if let newValue {
+                save(value: newValue, account: logineoUsernameAccount)
+            } else {
+                delete(account: logineoUsernameAccount)
+            }
+        }
+    }
+    
+    var logineoPassword: String? {
+        get { read(account: logineoPasswordAccount) }
+        set {
+            if let newValue {
+                save(value: newValue, account: logineoPasswordAccount)
+            } else {
+                delete(account: logineoPasswordAccount)
+            }
+        }
+    }
+    
+    var logineoURL: String {
+        get { UserDefaults.standard.string(forKey: logineoURLKey) ?? "169080.logineonrw-lms.de" }
+        set { UserDefaults.standard.set(newValue, forKey: logineoURLKey) }
+    }
+    
+    var hasLogineoCredentials: Bool {
+        guard let user = logineoUsername, !user.isEmpty,
+              let pass = logineoPassword, !pass.isEmpty else { return false }
+        return true
+    }
+    
+    func clearLogineoCredentials() {
+        logineoUsername = nil
+        logineoPassword = nil
     }
     
     // MARK: - Keychain Operations

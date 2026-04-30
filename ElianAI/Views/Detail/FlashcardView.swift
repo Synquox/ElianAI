@@ -11,18 +11,29 @@ struct FlashcardView: View {
     
     @State private var ttsService = TTSService()
     
+    // Card generation
+    @State private var showGenerateSheet = false
+    @State private var selectedCardCount = 20
+    @State private var specialInstructions = ""
+    @State private var isGenerating = false
+    
+    private let cardCountOptions = [10, 20, 30, 50]
+    
     private var allCards: [Flashcard] {
         note.flashcards.sorted { $0.createdAt < $1.createdAt }
     }
     
     var body: some View {
         if allCards.isEmpty {
-            EmptyStudyView(
-                icon: "rectangle.on.rectangle.fill",
-                title: "No Flashcards",
-                subtitle: "Flashcards will appear after generating study materials.",
-                color: .elianGreen
-            )
+            VStack(spacing: 20) {
+                EmptyStudyView(
+                    icon: "rectangle.on.rectangle.fill",
+                    title: "No Flashcards",
+                    subtitle: "Flashcards will appear after generating study materials.",
+                    color: .elianGreen
+                )
+                generateButton
+            }
         } else if showCompletionView {
             completionView
         } else if sessionCards.isEmpty {
@@ -36,11 +47,14 @@ struct FlashcardView: View {
                 Text("No cards are due for review right now.")
                     .font(.system(size: 16))
                     .foregroundStyle(.elianTextSecondary)
-                Button {
-                    resetDeck(fullReset: true)
-                } label: {
-                    Text("🔄 Start Full Review")
-                        .elianOutlineButton(color: .elianGreen)
+                HStack(spacing: 12) {
+                    Button {
+                        resetDeck(fullReset: true)
+                    } label: {
+                        Text("🔄 Start Full Review")
+                            .elianOutlineButton(color: .elianGreen)
+                    }
+                    generateButton
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -50,6 +64,102 @@ struct FlashcardView: View {
             cardDeckView
                 .onAppear { loadSessionCards() }
         }
+    }
+    
+    // MARK: - Generate Cards
+    
+    private var generateButton: some View {
+        Button {
+            showGenerateSheet = true
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                Text("Generate Cards")
+            }
+            .elianButton(color: .elianPurple)
+        }
+        .sheet(isPresented: $showGenerateSheet) {
+            generateCardsSheet
+        }
+    }
+    
+    private var generateCardsSheet: some View {
+        NavigationStack {
+            VStack(spacing: 24) {
+                // Card Count
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Number of Cards")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.elianTextSecondary)
+                    
+                    HStack(spacing: 10) {
+                        ForEach(cardCountOptions, id: \.self) { count in
+                            Button {
+                                withAnimation(.spring(duration: 0.2)) {
+                                    selectedCardCount = count
+                                }
+                            } label: {
+                                Text("\(count)")
+                                    .font(.system(size: 16, weight: .bold, design: .rounded))
+                                    .foregroundStyle(
+                                        selectedCardCount == count ? .white : .elianTextPrimary
+                                    )
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 14)
+                                    .background(
+                                        selectedCardCount == count
+                                            ? Color.elianPurple
+                                            : Color.elianSurfaceSecondary
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                
+                // Special Instructions
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Special Instructions (Optional)")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.elianTextSecondary)
+                    
+                    TextField("e.g. Focus on key dates, formulas only...", text: $specialInstructions, axis: .vertical)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 15))
+                        .padding(14)
+                        .lineLimit(3...6)
+                        .background(Color.elianSurfaceSecondary)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                
+                Spacer()
+            }
+            .padding(24)
+            .background(Color.elianBackground)
+            .navigationTitle("Generate Flashcards")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { showGenerateSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        // Trigger generation via GeminiService
+                        showGenerateSheet = false
+                        HapticEngine.notification(.success)
+                    } label: {
+                        if isGenerating {
+                            ProgressView().scaleEffect(0.8)
+                        } else {
+                            Text("Generate")
+                        }
+                    }
+                    .disabled(isGenerating)
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
     
     private func loadSessionCards() {
