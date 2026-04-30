@@ -272,7 +272,7 @@ struct NoteListView: View {
         }
     }
     
-    /// Shared method: extract text from file → auto-generate study materials
+    @MainActor
     private func autoGenerateFromText(_ text: String, sourceType: SourceType) {
         isGenerating = true
         errorMessage = nil
@@ -281,44 +281,40 @@ struct NoteListView: View {
             do {
                 let response = try await geminiService.generateStudyContent(from: text)
                 
-                await MainActor.run {
-                    let note = NoteModel(
-                        title: response.noteTitle,
-                        rawContent: text,
-                        generatedMarkdown: response.noteMarkdown,
-                        sourceType: sourceType,
-                        folder: folder
+                let note = NoteModel(
+                    title: response.noteTitle,
+                    rawContent: text,
+                    generatedMarkdown: response.noteMarkdown,
+                    sourceType: sourceType,
+                    folder: folder
+                )
+                modelContext.insert(note)
+                
+                for q in response.quizQuestions {
+                    let question = QuizQuestion(
+                        questionText: q.question,
+                        options: q.options,
+                        correctAnswerIndex: q.correctAnswerIndex,
+                        explanation: q.explanation
                     )
-                    modelContext.insert(note)
-                    
-                    for q in response.quizQuestions {
-                        let question = QuizQuestion(
-                            questionText: q.question,
-                            options: q.options,
-                            correctAnswerIndex: q.correctAnswerIndex,
-                            explanation: q.explanation
-                        )
-                        question.note = note
-                        modelContext.insert(question)
-                    }
-                    
-                    for f in response.flashcards {
-                        let card = Flashcard(front: f.front, back: f.back)
-                        card.note = note
-                        modelContext.insert(card)
-                    }
-                    
-                    selectedNote = note
-                    isGenerating = false
-                    try? modelContext.save()
-                    HapticEngine.notification(.success)
+                    question.note = note
+                    modelContext.insert(question)
                 }
+                
+                for f in response.flashcards {
+                    let card = Flashcard(front: f.front, back: f.back)
+                    card.note = note
+                    modelContext.insert(card)
+                }
+                
+                selectedNote = note
+                isGenerating = false
+                try? modelContext.save()
+                HapticEngine.notification(.success)
             } catch {
-                await MainActor.run {
-                    isGenerating = false
-                    errorMessage = error.localizedDescription
-                    HapticEngine.notification(.error)
-                }
+                isGenerating = false
+                errorMessage = error.localizedDescription
+                HapticEngine.notification(.error)
             }
         }
     }
@@ -380,20 +376,17 @@ struct NoteListView: View {
         }
     }
     
+    @MainActor
     private func handleImageImport(_ item: PhotosPickerItem?) {
         guard let item = item else { return }
         Task {
             guard let data = try? await item.loadTransferable(type: Data.self) else {
-                await MainActor.run {
-                    errorMessage = "Could not load image."
-                }
+                errorMessage = "Could not load image."
                 return
             }
             
-            await MainActor.run {
-                isGenerating = true
-                errorMessage = nil
-            }
+            isGenerating = true
+            errorMessage = nil
             
             do {
                 // Step 1: OCR
@@ -401,44 +394,40 @@ struct NoteListView: View {
                 // Step 2: Auto-generate study materials from extracted text
                 let response = try await geminiService.generateStudyContent(from: text)
                 
-                await MainActor.run {
-                    let note = NoteModel(
-                        title: response.noteTitle,
-                        rawContent: text,
-                        generatedMarkdown: response.noteMarkdown,
-                        sourceType: .image,
-                        folder: folder
+                let note = NoteModel(
+                    title: response.noteTitle,
+                    rawContent: text,
+                    generatedMarkdown: response.noteMarkdown,
+                    sourceType: .image,
+                    folder: folder
+                )
+                modelContext.insert(note)
+                
+                for q in response.quizQuestions {
+                    let question = QuizQuestion(
+                        questionText: q.question,
+                        options: q.options,
+                        correctAnswerIndex: q.correctAnswerIndex,
+                        explanation: q.explanation
                     )
-                    modelContext.insert(note)
-                    
-                    for q in response.quizQuestions {
-                        let question = QuizQuestion(
-                            questionText: q.question,
-                            options: q.options,
-                            correctAnswerIndex: q.correctAnswerIndex,
-                            explanation: q.explanation
-                        )
-                        question.note = note
-                        modelContext.insert(question)
-                    }
-                    
-                    for f in response.flashcards {
-                        let card = Flashcard(front: f.front, back: f.back)
-                        card.note = note
-                        modelContext.insert(card)
-                    }
-                    
-                    selectedNote = note
-                    isGenerating = false
-                    try? modelContext.save()
-                    HapticEngine.notification(.success)
+                    question.note = note
+                    modelContext.insert(question)
                 }
+                
+                for f in response.flashcards {
+                    let card = Flashcard(front: f.front, back: f.back)
+                    card.note = note
+                    modelContext.insert(card)
+                }
+                
+                selectedNote = note
+                isGenerating = false
+                try? modelContext.save()
+                HapticEngine.notification(.success)
             } catch {
-                await MainActor.run {
-                    isGenerating = false
-                    errorMessage = "Failed: \(error.localizedDescription)"
-                    HapticEngine.notification(.error)
-                }
+                isGenerating = false
+                errorMessage = "Failed: \(error.localizedDescription)"
+                HapticEngine.notification(.error)
             }
         }
     }

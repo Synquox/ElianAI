@@ -657,6 +657,7 @@ struct SettingsView: View {
         }
     }
     
+    @MainActor
     private func handleTextbookImport(_ result: Result<[URL], Error>) {
         switch result {
         case .success(let urls):
@@ -671,12 +672,10 @@ struct SettingsView: View {
                 let title = url.deletingPathExtension().lastPathComponent
                 
                 Task {
-                    await MainActor.run {
-                        let newTextbook = Textbook(title: title, pdfData: data)
-                        modelContext.insert(newTextbook)
-                        isAddingTextbook = false
-                        HapticEngine.notification(.success)
-                    }
+                    let newTextbook = Textbook(title: title, pdfData: data)
+                    modelContext.insert(newTextbook)
+                    isAddingTextbook = false
+                    HapticEngine.notification(.success)
                 }
             } catch {
                 url.stopAccessingSecurityScopedResource()

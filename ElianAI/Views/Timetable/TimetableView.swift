@@ -359,37 +359,29 @@ struct TimetableView: View {
         "cross.fill", "building.columns.fill"
     ]
     
+    @MainActor
     private func scanTimetableImage(_ item: PhotosPickerItem) {
         Task {
             guard let data = try? await item.loadTransferable(type: Data.self) else {
-                await MainActor.run {
-                    scanError = "Could not load the selected image."
-                }
+                scanError = "Could not load the selected image."
                 return
             }
             
-            await MainActor.run {
-                isScanning = true
-                scanError = nil
-            }
+            isScanning = true
+            scanError = nil
             
             do {
-                let gemini = await GeminiService.shared
-                let entries = try await gemini.parseTimetableImage(imageData: data)
+                let entries = try await geminiService.parseTimetableImage(imageData: data)
                 
-                await MainActor.run {
-                    applyTimetableEntries(entries)
-                    isScanning = false
-                    selectedPhotoItem = nil
-                    HapticEngine.notification(.success)
-                }
+                applyTimetableEntries(entries)
+                isScanning = false
+                selectedPhotoItem = nil
+                HapticEngine.notification(.success)
             } catch {
-                await MainActor.run {
-                    isScanning = false
-                    selectedPhotoItem = nil
-                    scanError = error.localizedDescription
-                    HapticEngine.notification(.error)
-                }
+                isScanning = false
+                selectedPhotoItem = nil
+                scanError = error.localizedDescription
+                HapticEngine.notification(.error)
             }
         }
     }
