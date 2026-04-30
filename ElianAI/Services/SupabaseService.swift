@@ -47,14 +47,20 @@ final class SupabaseService {
         isLoading = true
         defer { isLoading = false }
         
-        // Build the OAuth URL on the auth client's isolation domain
-        let authClient = client.auth
-        let url = try await Task.detached {
-            try authClient.getOAuthSignInURL(
-                provider: .google,
-                redirectTo: URL(string: "elianai://auth/callback")
-            )
-        }.value
+        // Build the OAuth URL manually to avoid cross-actor isolation with AuthClient
+        var components = URLComponents(
+            url: URL(string: SupabaseConfig.projectURL)!
+                .appendingPathComponent("/auth/v1/authorize"),
+            resolvingAgainstBaseURL: false
+        )!
+        components.queryItems = [
+            URLQueryItem(name: "provider", value: "google"),
+            URLQueryItem(name: "redirect_to", value: "elianai://auth/callback")
+        ]
+        
+        guard let url = components.url else {
+            throw URLError(.badURL)
+        }
         
         await UIApplication.shared.open(url)
     }
