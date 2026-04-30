@@ -26,17 +26,17 @@ final class BackgroundSyncService {
     func scheduleSync() {
         let request = BGAppRefreshTaskRequest(identifier: Self.syncTaskIdentifier)
         
-        // Target 18:00 today/tomorrow
+        // Target 16:00 today/tomorrow
         let calendar = Calendar.current
         var components = calendar.dateComponents([.year, .month, .day], from: Date())
-        components.hour = 18
+        components.hour = 16
         components.minute = 0
         
         if let targetDate = calendar.date(from: components) {
             if targetDate > Date() {
                 request.earliestBeginDate = targetDate
             } else {
-                // Already past 18:00 today, schedule for tomorrow
+                // Already past 16:00 today, schedule for tomorrow
                 request.earliestBeginDate = calendar.date(byAdding: .day, value: 1, to: targetDate)
             }
         } else {
@@ -159,6 +159,11 @@ final class BackgroundSyncService {
                     )
                     modelContext?.insert(entry)
                     newHomeworkCount += 1
+                    
+                    // Attempt to auto-schedule reminder based on course name mapping
+                    if let ctx = modelContext {
+                        self.autoScheduleReminderForNewEntry(entry, courseName: course.fullName, context: ctx)
+                    }
                     
                     // Auto-download non-book attachments (worksheets, PDFs, etc.)
                     if !isBookReference {
@@ -306,12 +311,72 @@ final class BackgroundSyncService {
         UNUserNotificationCenter.current().add(request)
     }
     
-    /// Request notification permissions
-    func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            if let error = error {
-                print("Notification permission error: \(error)")
+    }
+    
+    // MARK: - Auto Reminder Scheduling
+    
+    /// Try to find a matching subject and schedule a reminder
+    private func autoScheduleReminderForNewEntry(_ entry: HomeworkEntry, courseName: String, context: ModelContext) {
+        // Find subject with matching name
+        let descriptor = FetchDescriptor<Subject>()
+        guard let subjects = try? context.fetch(descriptor) else { return }
+        
+        let normalizedCourse = courseName.lowercased()
+        let subject = subjects.first { normalizedCourse.contains($0.name.lowercased()) }
+        
+        guard let subject = subject else { return }
+        
+        // Link entry to subject
+        entry.subject = subject
+        
+        // Schedule reminder (re-using logic from HomeworkView)
+        let periodDescriptor = FetchDescriptor<TimetablePeriod>()
+        guard let periods = try? context.fetch(periodDescriptor) else { return }
+        
+        let subjectPeriods = periods.filter { $0.subject?.id == subject.id }
+        guard !subjectPeriods.isEmpty else { return }
+        
+        let calendar = Calendar.current
+        let today = calendar.component(.weekday, from: Date())
+        let todayMapped = today == 1 ? 7 : today - 1
+        
+        var nextLessonDay: Int?
+        for offset in 1...7 {
+            let checkDay = ((todayMapped - 1 + offset) % 5) + 1
+            if subjectPeriods.contains(where: { $0.dayOfWeek == checkDay }) {
+                nextLessonDay = checkDay
+                break
             }
         }
+        
+        guard let lessonDay = nextLessonDay else { return }
+        
+        let daysUntilLesson: Int
+        if lessonDay > todayMapped {
+            daysUntilLesson = lessonDay - todayMapped
+        } else {
+            daysUntilLesson = 7 - todayMapped + lessonDay
+        }
+        
+        let reminderDayOffset = max(0, daysUntilLesson - 1)
+        guard let reminderDate = calendar.date(byAdding: .day, value: reminderDayOffset, to: Date()) else { return }
+        
+        var components = calendar.dateComponents([.year, .month, .day], from: reminderDate)
+        components.hour = 16
+        components.minute = 0
+        
+        let content = UNMutableNotificationContent()
+        content.title = "📚 Homework Reminder — \(subject.name)"
+        content.body = "\"\(entry.title)\" is due tomorrow. Make sure to complete it!"
+        content.sound = .default
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "homework-reminder-\(entry.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        
+        UNUserNotificationCenter.current().add(request)
     }
 }

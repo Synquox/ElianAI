@@ -8,7 +8,6 @@ enum SidebarDestination: Hashable {
     case homework
     case substitutionPlan
     case messages
-    case textbooks
     case folder(FolderModel)
 }
 
@@ -66,8 +65,6 @@ struct ContentView: View {
             SubstitutionPlanView()
         case .messages:
             MessageCenterView()
-        case .textbooks:
-            TextbookView()
         case .folder(let folder):
             NoteListView(folder: folder, selectedNote: $selectedNote)
         case nil:

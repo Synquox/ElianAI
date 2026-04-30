@@ -4,10 +4,13 @@ import SwiftData
 struct HomeworkView: View {
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \HomeworkEntry.createdAt, order: .reverse) private var allHomework: [HomeworkEntry]
+    @Query(sort: \Subject.name) private var subjects: [Subject]
+    @Query private var periods: [TimetablePeriod]
     
     @State private var showAddHomework = false
     @State private var newTitle = ""
     @State private var newDescription = ""
+    @State private var selectedSubject: Subject?
     @State private var isSyncing = false
     @State private var syncError: String?
     @State private var filterChecked = false
@@ -149,6 +152,70 @@ struct HomeworkView: View {
                         .frame(minHeight: 100)
                 }
                 
+                // Subject picker
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Subject")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.elianTextSecondary)
+                    
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            // "None" option
+                            Button {
+                                withAnimation(.spring(duration: 0.2)) {
+                                    selectedSubject = nil
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "xmark.circle")
+                                        .font(.system(size: 12))
+                                    Text("None")
+                                        .font(.system(size: 13, weight: .semibold))
+                                }
+                                .foregroundStyle(selectedSubject == nil ? .white : .elianTextSecondary)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(selectedSubject == nil ? Color.elianTextTertiary : Color.elianSurfaceSecondary)
+                                .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                            
+                            ForEach(subjects) { subject in
+                                Button {
+                                    withAnimation(.spring(duration: 0.2)) {
+                                        selectedSubject = subject
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: subject.icon)
+                                            .font(.system(size: 12))
+                                        Text(subject.name)
+                                            .font(.system(size: 13, weight: .semibold))
+                                    }
+                                    .foregroundStyle(
+                                        selectedSubject?.id == subject.id ? .white : Color(hex: subject.colorHex)
+                                    )
+                                    .padding(.horizontal, 14)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        selectedSubject?.id == subject.id
+                                            ? Color(hex: subject.colorHex)
+                                            : Color(hex: subject.colorHex).opacity(0.12)
+                                    )
+                                    .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                    
+                    if subjects.isEmpty {
+                        Text("Add subjects in the Timetable first")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.elianTextTertiary)
+                    }
+                }
+                
                 Spacer()
             }
             .padding(24)
@@ -161,6 +228,7 @@ struct HomeworkView: View {
                         showAddHomework = false
                         newTitle = ""
                         newDescription = ""
+                        selectedSubject = nil
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -171,7 +239,7 @@ struct HomeworkView: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
     
     // MARK: - Actions
@@ -180,14 +248,77 @@ struct HomeworkView: View {
         let entry = HomeworkEntry(
             title: newTitle.trimmingCharacters(in: .whitespaces),
             descriptionText: newDescription.trimmingCharacters(in: .whitespaces),
-            source: .manual
+            source: .manual,
+            subject: selectedSubject
         )
         modelContext.insert(entry)
         try? modelContext.save()
+        
+        // Schedule reminder if subject is assigned
+        if let subject = selectedSubject {
+            scheduleReminderForHomework(entry, subject: subject)
+        }
+        
         showAddHomework = false
         newTitle = ""
         newDescription = ""
+        selectedSubject = nil
         HapticEngine.notification(.success)
+    }
+    
+    /// Schedule a local notification at 16:00 the day before the next lesson of this subject
+    private func scheduleReminderForHomework(_ entry: HomeworkEntry, subject: Subject) {
+        // Find the next occurrence of this subject in the timetable
+        let subjectPeriods = periods.filter { $0.subject?.id == subject.id }
+        guard !subjectPeriods.isEmpty else { return }
+        
+        let calendar = Calendar.current
+        let today = calendar.component(.weekday, from: Date())
+        // Calendar: 1=Sun, 2=Mon ... 7=Sat → convert to our 1=Mon ... 5=Fri
+        let todayMapped = today == 1 ? 7 : today - 1
+        
+        // Find the next day that has this subject (wrapping around the week)
+        var nextLessonDay: Int?
+        for offset in 1...7 {
+            let checkDay = ((todayMapped - 1 + offset) % 5) + 1 // 1-5 only (Mon-Fri)
+            if subjectPeriods.contains(where: { $0.dayOfWeek == checkDay }) {
+                nextLessonDay = checkDay
+                break
+            }
+        }
+        
+        guard let lessonDay = nextLessonDay else { return }
+        
+        // Calculate the actual date of that next lesson
+        let daysUntilLesson: Int
+        if lessonDay > todayMapped {
+            daysUntilLesson = lessonDay - todayMapped
+        } else {
+            daysUntilLesson = 7 - todayMapped + lessonDay
+        }
+        
+        // Reminder = 16:00 the day BEFORE the lesson
+        let reminderDayOffset = max(0, daysUntilLesson - 1)
+        
+        guard let reminderDate = calendar.date(byAdding: .day, value: reminderDayOffset, to: Date()) else { return }
+        
+        var components = calendar.dateComponents([.year, .month, .day], from: reminderDate)
+        components.hour = 16
+        components.minute = 0
+        
+        let content = UNMutableNotificationContent()
+        content.title = "📚 Homework Reminder — \(subject.name)"
+        content.body = "\"\(entry.title)\" is due tomorrow. Make sure to complete it!"
+        content.sound = .default
+        
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let request = UNNotificationRequest(
+            identifier: "homework-reminder-\(entry.id.uuidString)",
+            content: content,
+            trigger: trigger
+        )
+        
+        UNUserNotificationCenter.current().add(request)
     }
     
     private func syncHomework() {
@@ -221,6 +352,12 @@ struct HomeworkRowView: View {
             Button {
                 withAnimation(.spring(duration: 0.2)) {
                     entry.isCheckedOff.toggle()
+                    // Cancel reminder if checked off
+                    if entry.isCheckedOff {
+                        UNUserNotificationCenter.current().removePendingNotificationRequests(
+                            withIdentifiers: ["homework-reminder-\(entry.id.uuidString)"]
+                        )
+                    }
                 }
                 HapticEngine.selection()
             } label: {
@@ -286,6 +423,21 @@ struct HomeworkRowView: View {
                 }
                 
                 HStack(spacing: 8) {
+                    // Subject badge
+                    if let subject = entry.subject {
+                        HStack(spacing: 3) {
+                            Image(systemName: subject.icon)
+                                .font(.system(size: 9))
+                            Text(subject.name)
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .foregroundStyle(Color(hex: subject.colorHex))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color(hex: subject.colorHex).opacity(0.12))
+                        .clipShape(Capsule())
+                    }
+                    
                     // Source badge
                     HStack(spacing: 3) {
                         Image(systemName: entry.source == .auto ? "antenna.radiowaves.left.and.right" : "hand.raised.fill")

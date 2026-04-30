@@ -7,6 +7,7 @@ struct MessageCenterView: View {
     
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var showSettings = false
     
     private var unreadCount: Int {
         messages.filter { !$0.isRead }.count
@@ -26,22 +27,46 @@ struct MessageCenterView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if messages.isEmpty {
                 VStack(spacing: 16) {
-                    Image(systemName: "envelope.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.elianOrange.opacity(0.5))
-                    Text("No Messages")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(.elianTextPrimary)
-                    Text("Sync with Logineo to fetch your latest messages.")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.elianTextSecondary)
-                        .multilineTextAlignment(.center)
-                    
-                    Button {
-                        syncMessages()
-                    } label: {
-                        Text("Sync Now")
+                    if !KeychainService.shared.hasLogineoCredentials {
+                        // No Logineo credentials
+                        Image(systemName: "network.slash")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.elianOrange.opacity(0.5))
+                        Text("Logineo Not Connected")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.elianTextPrimary)
+                        Text("Connect your Logineo account in Settings to receive messages.")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.elianTextSecondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Button {
+                            showSettings = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "gear")
+                                Text("Open Settings")
+                            }
                             .elianButton(color: .elianOrange)
+                        }
+                    } else {
+                        Image(systemName: "envelope.fill")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.elianOrange.opacity(0.5))
+                        Text("No Messages")
+                            .font(.system(size: 20, weight: .bold))
+                            .foregroundStyle(.elianTextPrimary)
+                        Text("Sync with Logineo to fetch your latest messages.")
+                            .font(.system(size: 15))
+                            .foregroundStyle(.elianTextSecondary)
+                            .multilineTextAlignment(.center)
+                        
+                        Button {
+                            syncMessages()
+                        } label: {
+                            Text("Sync Now")
+                                .elianButton(color: .elianOrange)
+                        }
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -93,6 +118,9 @@ struct MessageCenterView: View {
                     }
                 }
             }
+        }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
         }
         .alert("Sync Error", isPresented: Binding(
             get: { errorMessage != nil },

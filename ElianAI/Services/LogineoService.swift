@@ -79,15 +79,26 @@ final class LogineoService {
             throw LogineoError.loginFailed
         }
         
-        // Check we ended up on dashboard or that the login redirect happened
+        // Also check if we're still on the login page (login form present = not authenticated)
+        let loginFormPresent = try responseDoc.select("form#login").first() != nil ||
+                               (responseHTML.contains("id=\"loginbtn\"") && !responseHTML.contains("class=\"usermenu\""))
+        
+        if loginFormPresent {
+            throw LogineoError.loginFailed
+        }
+        
+        // Require positive proof of dashboard/authenticated page
         let isOnDashboard = httpResponse.url?.path.contains("my") == true ||
                            responseHTML.contains("data-block=\"navigation\"") ||
                            responseHTML.contains("id=\"page-my-index\"") ||
-                           responseHTML.contains("class=\"usermenu\"")
+                           responseHTML.contains("class=\"usermenu\"") ||
+                           responseHTML.contains("data-region=\"drawer\"") ||
+                           httpResponse.statusCode == 303
         
-        if isOnDashboard || httpResponse.statusCode == 303 || httpResponse.statusCode == 200 {
+        if isOnDashboard {
             isLoggedIn = true
         } else {
+            // Fail-closed: if we can't confirm dashboard, assume login failed
             throw LogineoError.loginFailed
         }
     }

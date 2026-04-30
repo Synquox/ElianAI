@@ -123,6 +123,137 @@ final class GeminiService {
         }
     }
     
+    // MARK: - Generate Flashcards Only
+    
+    /// Generates flashcards with a specific count and optional instructions
+    func generateFlashcards(from text: String, count: Int, instructions: String = "") async throws -> [FlashcardDTO] {
+        guard let model = generativeModel else {
+            throw GeminiError.noAPIKey
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        let instructionPart = instructions.isEmpty ? "" : "\nSPECIAL INSTRUCTIONS: \(instructions)"
+        
+        let prompt = """
+        You are an expert study assistant. Generate exactly \(count) flashcards from the following content.
+        
+        IMPORTANT: Respond ONLY with valid JSON matching the exact schema below. No markdown fences, no extra text.
+        
+        JSON Schema:
+        {
+            "flashcards": [
+                {
+                    "front": "Term or concept question",
+                    "back": "Definition or detailed answer"
+                }
+            ]
+        }
+        
+        Guidelines:
+        - Generate EXACTLY \(count) flashcards
+        - Cover the most important concepts, terms, and facts
+        - Front should be a clear question or term
+        - Back should be a concise but complete answer\(instructionPart)
+        
+        CONTENT TO ANALYZE:
+        \(text)
+        """
+        
+        let response = try await withRetry(taskName: "Flashcard Generation") {
+            try await model.generateContent(prompt)
+        }
+        
+        guard let responseText = response.text else {
+            throw GeminiError.emptyResponse
+        }
+        
+        let cleaned = responseText
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard let jsonData = cleaned.data(using: .utf8) else {
+            throw GeminiError.invalidJSON
+        }
+        
+        struct FlashcardResponse: Codable {
+            let flashcards: [FlashcardDTO]
+        }
+        
+        do {
+            let decoded = try JSONDecoder().decode(FlashcardResponse.self, from: jsonData)
+            return decoded.flashcards
+        } catch {
+            throw GeminiError.decodingFailed(error.localizedDescription)
+        }
+    }
+    
+    // MARK: - Parse Timetable Image
+    
+    /// Parses a photo of a timetable and returns structured entries
+    func parseTimetableImage(imageData: Data) async throws -> [TimetableParseEntry] {
+        guard let model = generativeModel else {
+            throw GeminiError.noAPIKey
+        }
+        
+        isLoading = true
+        defer { isLoading = false }
+        
+        let prompt = """
+        Analyze this image of a school timetable / schedule. Extract every subject entry.
+        
+        IMPORTANT: Respond ONLY with valid JSON matching the exact schema below. No markdown fences, no extra text.
+        
+        JSON Schema:
+        {
+            "entries": [
+                {
+                    "day": 1,
+                    "period": 1,
+                    "subject": "Mathematics"
+                }
+            ]
+        }
+        
+        Rules:
+        - "day" is 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday
+        - "period" is the row number starting from 1 (first lesson of the day)
+        - "subject" is the subject name as written on the timetable (keep original language)
+        - If a cell is empty or has a break, skip it
+        - Extract ALL entries visible in the timetable
+        """
+        
+        let response = try await withRetry(taskName: "Timetable Parsing") {
+            try await model.generateContent(prompt, ModelContent.Part.data(mimetype: "image/jpeg", imageData))
+        }
+        
+        guard let responseText = response.text else {
+            throw GeminiError.emptyResponse
+        }
+        
+        let cleaned = responseText
+            .replacingOccurrences(of: "```json", with: "")
+            .replacingOccurrences(of: "```", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        
+        guard let jsonData = cleaned.data(using: .utf8) else {
+            throw GeminiError.invalidJSON
+        }
+        
+        struct TimetableResponse: Codable {
+            let entries: [TimetableParseEntry]
+        }
+        
+        do {
+            let decoded = try JSONDecoder().decode(TimetableResponse.self, from: jsonData)
+            return decoded.entries
+        } catch {
+            throw GeminiError.decodingFailed(error.localizedDescription)
+        }
+    }
+    
     // MARK: - Chat with Notes
     
     func chatWithNotes(
@@ -238,6 +369,8 @@ extension GeminiService {
             retryStatus = .idle
             return result
         } catch {
+            // Extract the actual error description from Google's SDK
+            let detailedMessage = Self.extractDetailedError(error)
             let isRetryable = Self.isRetryableError(error)
             
             if isRetryable && attempt <= Self.maxRetries {
@@ -257,7 +390,7 @@ extension GeminiService {
                     taskName: taskName,
                     attempt: attempt,
                     delaySeconds: Int(delay),
-                    errorDescription: error.localizedDescription
+                    errorDescription: detailedMessage
                 )
                 
                 // Wait
@@ -270,14 +403,15 @@ extension GeminiService {
                     operation: operation
                 )
             } else {
-                retryStatus = .failed(error.localizedDescription)
+                retryStatus = .failed(detailedMessage)
                 
                 if isRetryable {
                     // All retries exhausted
                     sendFailureNotification(taskName: taskName)
                     throw GeminiError.rateLimitExhausted
                 }
-                throw error
+                // Re-throw with better message
+                throw GeminiError.apiError(detailedMessage)
             }
         }
     }
@@ -292,6 +426,42 @@ extension GeminiService {
             "resourceexhausted", "internal"
         ]
         return retryableKeywords.contains { desc.contains($0) }
+    }
+    
+    /// Extract a human-readable error message from Google's GenerateContentError
+    private static func extractDetailedError(_ error: Error) -> String {
+        // The GoogleGenerativeAI SDK wraps errors; try to extract the real message
+        let mirror = Mirror(reflecting: error)
+        for child in mirror.children {
+            if let desc = child.value as? String, !desc.isEmpty {
+                return desc
+            }
+        }
+        
+        // Fallback: check the full debug description for useful info
+        let debugDesc = String(describing: error)
+        if debugDesc.contains("RESOURCE_EXHAUSTED") || debugDesc.contains("429") {
+            return "API rate limit reached. The free tier has limited requests per minute. Please wait a moment and try again."
+        }
+        if debugDesc.contains("INVALID_ARGUMENT") {
+            return "Invalid request. The content may be too long or contain unsupported data."
+        }
+        if debugDesc.contains("PERMISSION_DENIED") || debugDesc.contains("API_KEY_INVALID") {
+            return "Invalid API key. Please check your Gemini API key in Settings."
+        }
+        if debugDesc.contains("NOT_FOUND") {
+            return "Model not found. The selected model may not be available on your API plan."
+        }
+        if debugDesc.contains("SAFETY") {
+            return "Content was blocked by safety filters. Try with different content."
+        }
+        
+        // Last resort: use localizedDescription but append debug info
+        let localized = error.localizedDescription
+        if localized.contains("error 1") || localized.contains("GenerateContentError") {
+            return "API call failed. This usually means rate limiting or an invalid API key. Debug: \(debugDesc.prefix(200))"
+        }
+        return localized
     }
     
     // MARK: - Notifications
@@ -348,6 +518,7 @@ enum GeminiError: LocalizedError {
     case invalidJSON
     case decodingFailed(String)
     case rateLimitExhausted
+    case apiError(String)
     
     var errorDescription: String? {
         switch self {
@@ -361,6 +532,8 @@ enum GeminiError: LocalizedError {
             return "Response decoding failed: \(detail)"
         case .rateLimitExhausted:
             return "API rate limit exceeded after multiple retries. Please wait a few minutes and try again."
+        case .apiError(let detail):
+            return "Gemini API error: \(detail)"
         }
     }
 }

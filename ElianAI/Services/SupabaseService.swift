@@ -42,27 +42,63 @@ final class SupabaseService {
     
     // MARK: - Google Sign-In via Supabase OAuth
     
-    /// Sign in with Google using Supabase's OAuth flow (opens browser)
+    /// Sign in with Google using Supabase's OAuth flow (opens secure auth session)
     func signInWithGoogle() async throws {
         isLoading = true
         defer { isLoading = false }
         
-        // Build the OAuth URL manually to avoid cross-actor isolation with AuthClient
-        var components = URLComponents(
-            url: URL(string: SupabaseConfig.projectURL)!
-                .appendingPathComponent("/auth/v1/authorize"),
-            resolvingAgainstBaseURL: false
-        )!
-        components.queryItems = [
-            URLQueryItem(name: "provider", value: "google"),
-            URLQueryItem(name: "redirect_to", value: "elianai://auth/callback")
-        ]
+        let url = try await client.auth.getOAuthSignInURL(
+            provider: .google,
+            redirectTo: URL(string: "elianai://auth")
+        )
         
-        guard let url = components.url else {
-            throw URLError(.badURL)
+        // Use ASWebAuthenticationSession for a native sign-in experience
+        return try await withCheckedThrowingContinuation { continuation in
+            let session = ASWebAuthenticationSession(
+                url: url,
+                callbackURLScheme: "elianai"
+            ) { callbackURL, error in
+                if let error = error {
+                    if (error as NSError).code == ASWebAuthenticationSessionError.canceledLogin.rawValue {
+                        continuation.resume(throwing: CancellationError())
+                    } else {
+                        continuation.resume(throwing: error)
+                    }
+                    return
+                }
+                
+                guard let callbackURL = callbackURL else {
+                    continuation.resume(throwing: URLError(.badURL))
+                    return
+                }
+                
+                Task {
+                    do {
+                        try await self.handleAuthCallback(url: callbackURL)
+                        continuation.resume()
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+            
+            session.presentationContextProvider = AuthPresentationContext.shared
+            session.prefersEphemeralWebBrowserSession = false // Allow Google to remember accounts
+            session.start()
         }
-        
-        await UIApplication.shared.open(url)
+    }
+}
+
+/// Helper for ASWebAuthenticationSession presentation
+class AuthPresentationContext: NSObject, ASWebAuthenticationPresentationContextProviding {
+    static let shared = AuthPresentationContext()
+    
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first else {
+            return ASPresentationAnchor()
+        }
+        return window
     }
     
     /// Handle the OAuth callback URL (from deep link)

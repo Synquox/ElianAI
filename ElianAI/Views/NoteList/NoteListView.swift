@@ -272,6 +272,57 @@ struct NoteListView: View {
         }
     }
     
+    /// Shared method: extract text from file → auto-generate study materials
+    private func autoGenerateFromText(_ text: String, sourceType: SourceType) {
+        isGenerating = true
+        errorMessage = nil
+        
+        Task {
+            do {
+                let response = try await geminiService.generateStudyContent(from: text)
+                
+                await MainActor.run {
+                    let note = NoteModel(
+                        title: response.noteTitle,
+                        rawContent: text,
+                        generatedMarkdown: response.noteMarkdown,
+                        sourceType: sourceType,
+                        folder: folder
+                    )
+                    modelContext.insert(note)
+                    
+                    for q in response.quizQuestions {
+                        let question = QuizQuestion(
+                            questionText: q.question,
+                            options: q.options,
+                            correctAnswerIndex: q.correctAnswerIndex,
+                            explanation: q.explanation
+                        )
+                        question.note = note
+                        modelContext.insert(question)
+                    }
+                    
+                    for f in response.flashcards {
+                        let card = Flashcard(front: f.front, back: f.back)
+                        card.note = note
+                        modelContext.insert(card)
+                    }
+                    
+                    selectedNote = note
+                    isGenerating = false
+                    try? modelContext.save()
+                    HapticEngine.notification(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    isGenerating = false
+                    errorMessage = error.localizedDescription
+                    HapticEngine.notification(.error)
+                }
+            }
+        }
+    }
+    
     private func handlePDFImport(_ result: Result<URL, Error>) {
         switch result {
         case .success(let url):
@@ -284,8 +335,7 @@ struct NoteListView: View {
                 return
             }
             
-            inputText = text
-            showNewNoteSheet = true
+            autoGenerateFromText(text, sourceType: .pdf)
             
         case .failure(let error):
             errorMessage = error.localizedDescription
@@ -304,8 +354,7 @@ struct NoteListView: View {
                 return
             }
             
-            inputText = text
-            showNewNoteSheet = true
+            autoGenerateFromText(text, sourceType: .docx)
             
         case .failure(let error):
             errorMessage = error.localizedDescription
@@ -324,8 +373,7 @@ struct NoteListView: View {
                 return
             }
             
-            inputText = text
-            showNewNoteSheet = true
+            autoGenerateFromText(text, sourceType: .ppt)
             
         case .failure(let error):
             errorMessage = error.localizedDescription
@@ -343,22 +391,53 @@ struct NoteListView: View {
             }
             
             await MainActor.run {
-                // For image OCR, we'll send the image directly to Gemini for text extraction
                 isGenerating = true
                 errorMessage = nil
             }
             
             do {
+                // Step 1: OCR
                 let text = try await geminiService.extractTextFromImage(imageData: data)
+                // Step 2: Auto-generate study materials from extracted text
+                let response = try await geminiService.generateStudyContent(from: text)
+                
                 await MainActor.run {
-                    inputText = text
+                    let note = NoteModel(
+                        title: response.noteTitle,
+                        rawContent: text,
+                        generatedMarkdown: response.noteMarkdown,
+                        sourceType: .image,
+                        folder: folder
+                    )
+                    modelContext.insert(note)
+                    
+                    for q in response.quizQuestions {
+                        let question = QuizQuestion(
+                            questionText: q.question,
+                            options: q.options,
+                            correctAnswerIndex: q.correctAnswerIndex,
+                            explanation: q.explanation
+                        )
+                        question.note = note
+                        modelContext.insert(question)
+                    }
+                    
+                    for f in response.flashcards {
+                        let card = Flashcard(front: f.front, back: f.back)
+                        card.note = note
+                        modelContext.insert(card)
+                    }
+                    
+                    selectedNote = note
                     isGenerating = false
-                    showNewNoteSheet = true
+                    try? modelContext.save()
+                    HapticEngine.notification(.success)
                 }
             } catch {
                 await MainActor.run {
                     isGenerating = false
-                    errorMessage = "OCR failed: \(error.localizedDescription)"
+                    errorMessage = "Failed: \(error.localizedDescription)"
+                    HapticEngine.notification(.error)
                 }
             }
         }

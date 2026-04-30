@@ -56,13 +56,6 @@ struct SidebarView: View {
                     label: "Messages",
                     color: .elianOrange
                 )
-                
-                sidebarItem(
-                    destination: .textbooks,
-                    icon: "text.book.closed.fill",
-                    label: "Textbooks",
-                    color: .elianPink
-                )
             } header: {
                 Text("SCHOOL")
                     .font(.system(size: 12, weight: .bold))

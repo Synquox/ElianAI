@@ -8,6 +8,7 @@ struct SubstitutionPlanView: View {
     @State private var selectedCourseId: Int?
     @State private var courses: [MoodleCourse] = []
     @State private var showCoursePicker = false
+    @State private var showSettings = false
     
     // Stored course selection
     @AppStorage("substitutionPlanCourseId") private var savedCourseId: Int = 0
@@ -53,6 +54,9 @@ struct SubstitutionPlanView: View {
         .sheet(isPresented: $showCoursePicker) {
             coursePickerSheet
         }
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
         .onAppear {
             if savedCourseId != 0 && pdfData == nil {
                 loadPlan()
@@ -64,25 +68,53 @@ struct SubstitutionPlanView: View {
     
     private var setupView: some View {
         VStack(spacing: 20) {
-            Image(systemName: "doc.text.magnifyingglass")
-                .font(.system(size: 48))
-                .foregroundStyle(.elianPurple.opacity(0.5))
-            
-            Text("No Course Selected")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(.elianTextPrimary)
-            
-            Text("Select the Logineo course that contains your substitution plan (Vertretungsplan).")
-                .font(.system(size: 15))
-                .foregroundStyle(.elianTextSecondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 400)
-            
-            Button {
-                showCoursePicker = true
-            } label: {
-                Text("Select Course")
-                    .elianButton(color: .elianPurple)
+            if !KeychainService.shared.hasLogineoCredentials {
+                // No Logineo configured at all
+                Image(systemName: "network.slash")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.elianOrange.opacity(0.5))
+                
+                Text("Logineo Not Connected")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.elianTextPrimary)
+                
+                Text("You need to connect your Logineo account first to access the substitution plan.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.elianTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 400)
+                
+                Button {
+                    showSettings = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "gear")
+                        Text("Open Settings")
+                    }
+                    .elianButton(color: .elianOrange)
+                }
+            } else {
+                // Logineo connected but no course selected
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.elianPurple.opacity(0.5))
+                
+                Text("No Course Selected")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(.elianTextPrimary)
+                
+                Text("Select the Logineo course that contains your substitution plan (Vertretungsplan).")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.elianTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 400)
+                
+                Button {
+                    showCoursePicker = true
+                } label: {
+                    Text("Select Course")
+                        .elianButton(color: .elianPurple)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

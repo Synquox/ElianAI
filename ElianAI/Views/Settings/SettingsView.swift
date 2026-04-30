@@ -7,6 +7,9 @@ struct SettingsView: View {
     @Environment(GeminiService.self) private var geminiService
     @Environment(SupabaseService.self) private var supabaseService
     
+    @Query(sort: \Subject.name) private var subjects: [Subject]
+    @Query(sort: \Textbook.title) private var textbooks: [Textbook]
+    
     @State private var selectedModel: GeminiModelOption = GeminiService.shared.currentModel
     @State private var apiKey: String = ""
     @State private var showAPIKey = false
@@ -23,6 +26,10 @@ struct SettingsView: View {
     @State private var isTestingConnection = false
     @State private var connectionStatus: ConnectionTestResult?
     @State private var isSyncing = false
+    
+    // Textbooks
+    @State private var showPDFPicker = false
+    @State private var isAddingTextbook = false
     
     // Language
     @State private var selectedLanguage: AppLanguage = LocalizationManager.shared.currentLanguage
@@ -296,6 +303,91 @@ struct SettingsView: View {
                         }
                     }
                     
+                    // Textbooks
+                    settingsSection(title: "Textbooks", icon: "book.closed.fill", color: .elianPink) {
+                        VStack(spacing: 16) {
+                            if textbooks.isEmpty {
+                                Text("No textbooks added yet.")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.elianTextTertiary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            } else {
+                                ForEach(textbooks) { textbook in
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        HStack {
+                                            Image(systemName: "doc.fill")
+                                                .foregroundStyle(.elianPink)
+                                            Text(textbook.title)
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(.elianTextPrimary)
+                                            Spacer()
+                                            Button(role: .destructive) {
+                                                modelContext.delete(textbook)
+                                            } label: {
+                                                Image(systemName: "trash")
+                                                    .font(.system(size: 14))
+                                                    .foregroundStyle(.elianError)
+                                            }
+                                        }
+                                        
+                                        HStack {
+                                            Text("Subject:")
+                                                .font(.system(size: 12))
+                                                .foregroundStyle(.elianTextTertiary)
+                                            
+                                            Picker("Subject", selection: Binding(
+                                                get: { textbook.subject },
+                                                set: { textbook.subject = $0 }
+                                            )) {
+                                                Text("None").tag(nil as Subject?)
+                                                ForEach(subjects) { subject in
+                                                    Text(subject.name).tag(subject as Subject?)
+                                                }
+                                            }
+                                            .pickerStyle(.menu)
+                                            .labelsHidden()
+                                            .font(.system(size: 12))
+                                        }
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(Color.elianSurfaceSecondary)
+                                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    }
+                                    .padding(12)
+                                    .background(Color.elianSurfaceSecondary.opacity(0.5))
+                                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                                }
+                            }
+                            
+                            Button {
+                                showPDFPicker = true
+                            } label: {
+                                HStack(spacing: 8) {
+                                    if isAddingTextbook {
+                                        ProgressView().scaleEffect(0.8)
+                                    } else {
+                                        Image(systemName: "plus")
+                                    }
+                                    Text("Add Textbook (PDF)")
+                                }
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .background(Color.elianPink)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                            }
+                            .disabled(isAddingTextbook)
+                        }
+                    }
+                    .fileImporter(
+                        isPresented: $showPDFPicker,
+                        allowedContentTypes: [.pdf],
+                        allowsMultipleSelection: false
+                    ) { result in
+                        handleTextbookImport(result)
+                    }
+                    
                     // About
                     settingsSection(title: "About", icon: "info.circle.fill", color: .elianBlue) {
                         VStack(spacing: 12) {
@@ -562,6 +654,41 @@ struct SettingsView: View {
                     }
                 }
             }
+        }
+    }
+    
+    private func handleTextbookImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            guard url.startAccessingSecurityScopedResource() else { return }
+            defer { url.stopAccessingSecurityScopedResource() }
+            
+            isAddingTextbook = true
+            
+            Task {
+                do {
+                    let data = try Data(contentsOf: url)
+                    let title = url.deletingPathExtension().lastPathComponent
+                    
+                    await MainActor.run {
+                        let newTextbook = Textbook(title: title, pdfData: data)
+                        modelContext.insert(newTextbook)
+                        isAddingTextbook = false
+                        HapticEngine.notification(.success)
+                    }
+                } catch {
+                    await MainActor.run {
+                        isAddingTextbook = false
+                        errorMessage = "Failed to load PDF: \(error.localizedDescription)"
+                        showError = true
+                    }
+                }
+            }
+            
+        case .failure(let error):
+            errorMessage = error.localizedDescription
+            showError = true
         }
     }
     

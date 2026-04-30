@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import PhotosUI
 
 struct TimetableView: View {
     @Environment(\.modelContext) private var modelContext
@@ -11,6 +12,10 @@ struct TimetableView: View {
     @State private var showConfigSheet = false
     @State private var selectedPeriod: TimetablePeriod?
     @State private var showSubjectPicker = false
+    @State private var showImagePicker = false
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var isScanning = false
+    @State private var scanError: String?
     
     private var config: TimetableConfig {
         configs.first ?? TimetableConfig()
@@ -55,6 +60,23 @@ struct TimetableView: View {
                         .font(.system(size: 20))
                         .foregroundStyle(.elianBlue)
                 }
+                
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    if isScanning {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 18))
+                            .foregroundStyle(.elianGreen)
+                    }
+                }
+                .disabled(isScanning)
+            }
+        }
+        .onChange(of: selectedPhotoItem) { _, newValue in
+            if let newValue {
+                scanTimetableImage(newValue)
             }
         }
         .sheet(isPresented: $showEditSubjects) {
@@ -69,6 +91,36 @@ struct TimetableView: View {
         .onAppear {
             ensureConfigExists()
             ensurePeriodsExist()
+        }
+        .alert("Scan Error", isPresented: Binding(
+            get: { scanError != nil },
+            set: { if !$0 { scanError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(scanError ?? "")
+        }
+        .overlay {
+            if isScanning {
+                ZStack {
+                    Color.black.opacity(0.4)
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("Scanning timetable...")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                        Text("AI is reading your schedule image")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    .padding(30)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                }
+                .ignoresSafeArea()
+            }
         }
     }
     
@@ -291,6 +343,98 @@ struct TimetableView: View {
                 }
             }
         }
+        try? modelContext.save()
+    }
+    
+    // MARK: - Timetable Image Scanning
+    
+    private static let subjectColors = [
+        "#4A9EFF", "#EF4444", "#34D399", "#FB923C", "#A78BFA",
+        "#F472B6", "#FACC15", "#2DD4BF", "#818CF8", "#F87171"
+    ]
+    
+    private static let subjectIcons = [
+        "book.fill", "function", "globe.americas.fill", "atom",
+        "paintpalette.fill", "music.note", "figure.run", "laptopcomputer",
+        "cross.fill", "building.columns.fill"
+    ]
+    
+    private func scanTimetableImage(_ item: PhotosPickerItem) {
+        Task {
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                await MainActor.run {
+                    scanError = "Could not load the selected image."
+                }
+                return
+            }
+            
+            await MainActor.run {
+                isScanning = true
+                scanError = nil
+            }
+            
+            do {
+                let gemini = await GeminiService.shared
+                let entries = try await gemini.parseTimetableImage(imageData: data)
+                
+                await MainActor.run {
+                    applyTimetableEntries(entries)
+                    isScanning = false
+                    selectedPhotoItem = nil
+                    HapticEngine.notification(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    isScanning = false
+                    selectedPhotoItem = nil
+                    scanError = error.localizedDescription
+                    HapticEngine.notification(.error)
+                }
+            }
+        }
+    }
+    
+    private func applyTimetableEntries(_ entries: [TimetableParseEntry]) {
+        // Build a cache of existing subjects (case-insensitive)
+        var subjectCache: [String: Subject] = [:]
+        for s in subjects {
+            subjectCache[s.name.lowercased()] = s
+        }
+        
+        var colorIndex = subjects.count
+        
+        for entry in entries {
+            guard entry.day >= 1, entry.day <= 5, entry.period >= 1 else { continue }
+            
+            // Find or create subject
+            let subjectKey = entry.subject.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !subjectKey.isEmpty else { continue }
+            
+            let subject: Subject
+            if let existing = subjectCache[subjectKey] {
+                subject = existing
+            } else {
+                // Auto-create new subject
+                let newSubject = Subject(
+                    name: entry.subject.trimmingCharacters(in: .whitespaces),
+                    colorHex: Self.subjectColors[colorIndex % Self.subjectColors.count],
+                    icon: Self.subjectIcons[colorIndex % Self.subjectIcons.count]
+                )
+                modelContext.insert(newSubject)
+                subjectCache[subjectKey] = newSubject
+                subject = newSubject
+                colorIndex += 1
+            }
+            
+            // Find or create the period slot
+            if let existingPeriod = findPeriod(day: entry.day, period: entry.period) {
+                existingPeriod.subject = subject
+            } else {
+                let newPeriod = TimetablePeriod(dayOfWeek: entry.day, periodNumber: entry.period, subject: subject)
+                modelContext.insert(newPeriod)
+            }
+        }
+        
         try? modelContext.save()
     }
 }

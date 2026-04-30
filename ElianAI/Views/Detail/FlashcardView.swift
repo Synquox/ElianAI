@@ -1,7 +1,11 @@
 import SwiftUI
+import SwiftData
 
 struct FlashcardView: View {
     let note: NoteModel
+    
+    @Environment(\.modelContext) private var modelContext
+    @Environment(GeminiService.self) private var geminiService
     
     @State private var currentIndex = 0
     @State private var isFlipped = false
@@ -16,6 +20,7 @@ struct FlashcardView: View {
     @State private var selectedCardCount = 20
     @State private var specialInstructions = ""
     @State private var isGenerating = false
+    @State private var generationError: String?
     
     private let cardCountOptions = [10, 20, 30, 50]
     
@@ -29,7 +34,7 @@ struct FlashcardView: View {
                 EmptyStudyView(
                     icon: "rectangle.on.rectangle.fill",
                     title: "No Flashcards",
-                    subtitle: "Flashcards will appear after generating study materials.",
+                    subtitle: "Generate flashcards to start studying.",
                     color: .elianGreen
                 )
                 generateButton
@@ -133,6 +138,16 @@ struct FlashcardView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
                 
+                // Error
+                if let error = generationError {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text(error)
+                    }
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.elianError)
+                }
+                
                 Spacer()
             }
             .padding(24)
@@ -141,13 +156,15 @@ struct FlashcardView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { showGenerateSheet = false }
+                    Button("Cancel") {
+                        showGenerateSheet = false
+                        generationError = nil
+                    }
+                    .disabled(isGenerating)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
-                        // Trigger generation via GeminiService
-                        showGenerateSheet = false
-                        HapticEngine.notification(.success)
+                        generateCards()
                     } label: {
                         if isGenerating {
                             ProgressView().scaleEffect(0.8)
@@ -160,6 +177,56 @@ struct FlashcardView: View {
             }
         }
         .presentationDetents([.medium])
+        .interactiveDismissDisabled(isGenerating)
+    }
+    
+    // MARK: - Generate Cards Action
+    
+    private func generateCards() {
+        isGenerating = true
+        generationError = nil
+        
+        Task {
+            do {
+                let flashcardDTOs = try await geminiService.generateFlashcards(
+                    from: note.rawContent,
+                    count: selectedCardCount,
+                    instructions: specialInstructions
+                )
+                
+                await MainActor.run {
+                    // Delete old cards
+                    for card in note.flashcards {
+                        modelContext.delete(card)
+                    }
+                    
+                    // Insert new cards
+                    for dto in flashcardDTOs {
+                        let card = Flashcard(front: dto.front, back: dto.back)
+                        card.note = note
+                        modelContext.insert(card)
+                    }
+                    
+                    try? modelContext.save()
+                    isGenerating = false
+                    showGenerateSheet = false
+                    specialInstructions = ""
+                    
+                    // Reload session
+                    sessionCards = []
+                    showCompletionView = false
+                    loadSessionCards()
+                    
+                    HapticEngine.notification(.success)
+                }
+            } catch {
+                await MainActor.run {
+                    isGenerating = false
+                    generationError = error.localizedDescription
+                    HapticEngine.notification(.error)
+                }
+            }
+        }
     }
     
     private func loadSessionCards() {
@@ -240,11 +307,11 @@ struct FlashcardView: View {
                 }
                 .padding(.bottom, 20)
             } else {
+                // 3-grade system: Didn't Know / Partially / Knew It
                 HStack(spacing: 8) {
-                    GradeButton(label: "Again", color: .elianError) { gradeCard(0) }
-                    GradeButton(label: "Hard", color: .elianOrange) { gradeCard(1) }
-                    GradeButton(label: "Good", color: .elianGreen) { gradeCard(2) }
-                    GradeButton(label: "Easy", color: .elianBlue) { gradeCard(3) }
+                    GradeButton(label: "❌ Didn't Know", color: .elianError) { gradeCard(0) }
+                    GradeButton(label: "🤔 Partially", color: .elianOrange) { gradeCard(2) }
+                    GradeButton(label: "✅ Knew It", color: .elianGreen) { gradeCard(3) }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
@@ -312,7 +379,7 @@ struct FlashcardView: View {
             
             Spacer()
             
-            Text("Tap to flip")
+            Text("Tap to flip • Swipe to grade")
                 .font(.system(size: 12))
                 .foregroundStyle(.elianTextTertiary)
         }
@@ -362,6 +429,8 @@ struct FlashcardView: View {
                     Text("🔄 Full Reset")
                         .elianOutlineButton(color: .elianGreen)
                 }
+                
+                generateButton
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -383,10 +452,10 @@ struct FlashcardView: View {
         let threshold: CGFloat = 100
         
         if gesture.translation.width > threshold {
-            // Swipe right = Good (2)
-            gradeCard(2)
+            // Swipe right = Knew It (3)
+            gradeCard(3)
         } else if gesture.translation.width < -threshold {
-            // Swipe left = Again (0)
+            // Swipe left = Didn't Know (0)
             gradeCard(0)
         } else {
             withAnimation(.spring(duration: 0.3)) {
