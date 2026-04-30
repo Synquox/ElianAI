@@ -37,6 +37,11 @@ targets:
       - package: SwiftSoup
       - package: Supabase
       - package: ZIPFoundation
+      - sdk: AuthenticationServices.framework
+      - sdk: PhotosUI.framework
+      - sdk: UserNotifications.framework
+      - sdk: Photos.framework
+      - sdk: CryptoKit.framework
     info:
       path: ElianAI/Info.plist
       properties:
