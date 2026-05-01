@@ -76,6 +76,8 @@ struct SettingsView: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
+                                    .textContentType(.username)
+                                    .submitLabel(.next)
                             }
                             
                             // Password
@@ -89,6 +91,8 @@ struct SettingsView: View {
                                     .padding(12)
                                     .background(Color.elianSurfaceSecondary)
                                     .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    .textContentType(.password)
+                                    .submitLabel(.done)
                             }
                             
                             // Save + Test

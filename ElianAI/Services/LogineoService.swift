@@ -78,7 +78,7 @@ final class LogineoService {
         request.setValue("\(baseURL)/login/index.php", forHTTPHeaderField: "Referer")
         request.setValue("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
         
-        var body = "username=\(urlEncode(username))&password=\(urlEncode(password))&anchor="
+        var body = "username=\(urlEncode(username))&password=\(urlEncode(password))&anchor=&loginbtn=Anmelden"
         if let token = try doc.select("input[name=logintoken]").first()?.attr("value") {
             body += "&logintoken=\(urlEncode(token))"
         }
@@ -465,7 +465,9 @@ final class LogineoService {
     }
     
     private func urlEncode(_ string: String) -> String {
-        string.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? string
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return string.addingPercentEncoding(withAllowedCharacters: allowed) ?? string
     }
     
     private func detectFileType(from name: String, url: String) -> String {
