@@ -187,94 +187,104 @@ struct NoteDetailView: View {
 // MARK: - Custom MarkdownUI Theme
 
 extension MarkdownUI.Theme {
-    static let elianAI = Theme()
-        .text {
-            ForegroundColor(.elianTextPrimary)
-            FontSize(16)
-        }
-        .heading1 { configuration in
-            configuration.label
-                .markdownMargin(top: 24, bottom: 12)
-                .markdownTextStyle {
-                    FontWeight(.bold)
-                    FontSize(28)
-                    ForegroundColor(.elianTextPrimary)
-                }
-        }
-        .heading2 { configuration in
-            configuration.label
-                .markdownMargin(top: 20, bottom: 10)
-                .markdownTextStyle {
-                    FontWeight(.bold)
-                    FontSize(22)
-                    ForegroundColor(.elianBlue)
-                }
-        }
-        .heading3 { configuration in
-            configuration.label
-                .markdownMargin(top: 16, bottom: 8)
-                .markdownTextStyle {
-                    FontWeight(.semibold)
-                    FontSize(18)
-                    ForegroundColor(.elianPurple)
-                }
-        }
-        .strong {
-            FontWeight(.bold)
-            ForegroundColor(.elianTextPrimary)
-        }
-        .emphasis {
-            FontStyle(.italic)
-            ForegroundColor(.elianTextSecondary)
-        }
-        .code {
-            FontFamilyVariant(.monospaced)
-            FontSize(14)
-            ForegroundColor(.elianGreen)
-            BackgroundColor(Color.elianSurfaceSecondary)
-        }
-        .codeBlock { configuration in
-            configuration.label
-                .markdownTextStyle {
-                    FontFamilyVariant(.monospaced)
-                    FontSize(14)
-                    ForegroundColor(.elianTextPrimary)
-                }
-                .padding(16)
-                .background(Color.elianSurfaceSecondary)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .markdownMargin(top: 8, bottom: 8)
-        }
-        .table { configuration in
-            configuration.label
-                .markdownTableBorderStyle(.init(color: .elianBorder))
-                .markdownMargin(top: 8, bottom: 8)
-        }
-        .tableCell { configuration in
-            configuration.label
-                .markdownTextStyle {
-                    FontSize(14)
-                    ForegroundColor(.elianTextPrimary)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-        }
-        .listItem { configuration in
-            configuration.label
-                .markdownMargin(top: 4, bottom: 4)
-        }
-        .blockquote { configuration in
-            HStack(spacing: 0) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.elianBlue)
-                    .frame(width: 4)
+    static var elianAI: Theme {
+        let base = Theme()
+            .text {
+                ForegroundColor(.elianTextPrimary)
+                FontSize(16)
+            }
+            .heading1 { configuration in
+                configuration.label
+                    .markdownMargin(top: 24, bottom: 12)
+                    .markdownTextStyle {
+                        FontWeight(.bold)
+                        FontSize(28)
+                        ForegroundColor(.elianTextPrimary)
+                    }
+            }
+            .heading2 { configuration in
+                configuration.label
+                    .markdownMargin(top: 20, bottom: 10)
+                    .markdownTextStyle {
+                        FontWeight(.bold)
+                        FontSize(22)
+                        ForegroundColor(.elianBlue)
+                    }
+            }
+            
+        let step1 = base
+            .heading3 { configuration in
+                configuration.label
+                    .markdownMargin(top: 16, bottom: 8)
+                    .markdownTextStyle {
+                        FontWeight(.semibold)
+                        FontSize(18)
+                        ForegroundColor(.elianPurple)
+                    }
+            }
+            .strong {
+                FontWeight(.bold)
+                ForegroundColor(.elianTextPrimary)
+            }
+            .emphasis {
+                FontStyle(.italic)
+                ForegroundColor(.elianTextSecondary)
+            }
+            
+        let step2 = step1
+            .code {
+                FontFamilyVariant(.monospaced)
+                FontSize(14)
+                ForegroundColor(.elianGreen)
+                BackgroundColor(Color.elianSurfaceSecondary)
+            }
+            .codeBlock { configuration in
                 configuration.label
                     .markdownTextStyle {
-                        ForegroundColor(.elianTextSecondary)
-                        FontStyle(.italic)
+                        FontFamilyVariant(.monospaced)
+                        FontSize(14)
+                        ForegroundColor(.elianTextPrimary)
                     }
-                    .padding(.leading, 12)
+                    .padding(16)
+                    .background(Color.elianSurfaceSecondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .markdownMargin(top: 8, bottom: 8)
             }
-            .padding(.vertical, 4)
-        }
+            
+        let step3 = step2
+            .table { configuration in
+                configuration.label
+                    .markdownTableBorderStyle(.init(color: .elianBorder))
+                    .markdownMargin(top: 8, bottom: 8)
+            }
+            .tableCell { configuration in
+                configuration.label
+                    .markdownTextStyle {
+                        FontSize(14)
+                        ForegroundColor(.elianTextPrimary)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+            
+        return step3
+            .listItem { configuration in
+                configuration.label
+                    .markdownMargin(top: 4, bottom: 4)
+            }
+            .blockquote { configuration in
+                HStack(spacing: 0) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.elianBlue)
+                        .frame(width: 4)
+                    configuration.label
+                        .markdownTextStyle {
+                            ForegroundColor(.elianTextSecondary)
+                            FontStyle(.italic)
+                        }
+                        .padding(.leading, 12)
+                }
+                .padding(.vertical, 4)
+            }
+    }
 }
