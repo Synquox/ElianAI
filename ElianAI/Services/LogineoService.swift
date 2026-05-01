@@ -16,7 +16,8 @@ final class LogineoService {
     
     private init() {
         let config = URLSessionConfiguration.default
-        config.httpCookieStorage = HTTPCookieStorage.shared
+        // Use a private cookie storage to avoid conflicts with other accounts (like Google/SSO)
+        config.httpCookieStorage = HTTPCookieStorage() 
         config.httpCookieAcceptPolicy = .always
         config.httpShouldSetCookies = true
         session = URLSession(configuration: config)
@@ -40,6 +41,13 @@ final class LogineoService {
         
         isLoading = true
         defer { isLoading = false }
+        
+        // Clear existing cookies to ensure a fresh session and avoid conflicts from previous failed attempts
+        if let cookies = session.configuration.httpCookieStorage?.cookies {
+            for cookie in cookies {
+                session.configuration.httpCookieStorage?.deleteCookie(cookie)
+            }
+        }
         
         // Step 1: Fetch the login page to get the login token
         let loginPageURL = URL(string: "\(baseURL)/login/index.php")!

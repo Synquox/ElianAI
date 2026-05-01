@@ -14,35 +14,49 @@ final class AudioRecorderService: NSObject, AVAudioRecorderDelegate {
     }
     
     func startRecording() async throws {
-        let granted = await AVAudioApplication.requestRecordPermission()
+        let session = AVAudioSession.sharedInstance()
+        
+        // Use a more compatible way to request permission that handles all iOS versions reliably
+        let granted = await withCheckedContinuation { continuation in
+            session.requestRecordPermission { response in
+                continuation.resume(returning: response)
+            }
+        }
+        
         guard granted else {
             throw NSError(domain: "AudioRecorder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone access denied"])
         }
         
-        let session = AVAudioSession.sharedInstance()
-        
-        try session.setCategory(.playAndRecord, mode: .default)
+        try session.setCategory(.playAndRecord, mode: .default, options: .defaultToSpeaker)
         try session.setActive(true)
         
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("recording.m4a")
+        // Unique filename to avoid conflicts and potential crashes on file access
+        let filename = "recording_\(UUID().uuidString).m4a"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
         
         let settings: [String: Any] = [
             AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-            AVSampleRateKey: 44100,
+            AVSampleRateKey: 44100.0,
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
         
         audioRecorder = try AVAudioRecorder(url: url, settings: settings)
         audioRecorder?.delegate = self
+        audioRecorder?.prepareToRecord() // Prepare before recording
         audioRecorder?.record()
-        isRecording = true
-        lastRecordedURL = url
+        
+        await MainActor.run {
+            isRecording = true
+            lastRecordedURL = url
+        }
     }
     
     func stopRecording() {
         audioRecorder?.stop()
-        isRecording = false
+        Task { @MainActor in
+            isRecording = false
+        }
     }
     
     func getRecordingData() -> Data? {
@@ -51,9 +65,11 @@ final class AudioRecorderService: NSObject, AVAudioRecorderDelegate {
     }
     
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
-        isRecording = false
-        if !flag {
-            lastRecordedURL = nil
+        Task { @MainActor in
+            isRecording = false
+            if !flag {
+                lastRecordedURL = nil
+            }
         }
     }
 }
