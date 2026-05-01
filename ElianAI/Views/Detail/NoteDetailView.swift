@@ -187,8 +187,8 @@ struct NoteDetailView: View {
 // MARK: - Custom MarkdownUI Theme
 
 extension MarkdownUI.Theme {
-    static var elianAI: Theme {
-        let base = Theme()
+    static var elianAI: MarkdownUI.Theme {
+        let base = MarkdownUI.Theme()
             .text {
                 ForegroundColor(.elianTextPrimary)
                 FontSize(16)
