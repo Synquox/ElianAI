@@ -254,7 +254,7 @@ extension MarkdownUI.Theme {
         let step3 = step2
             .table { configuration in
                 configuration.label
-                    .markdownTableBorderStyle(.init(color: .elianBorder))
+                    .markdownTableBorderStyle(TableBorderStyle(color: Color.elianBorder))
                     .markdownMargin(top: 8, bottom: 8)
             }
             .tableCell { configuration in
