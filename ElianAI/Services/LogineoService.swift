@@ -24,9 +24,17 @@ final class LogineoService {
     }
     
     var baseURL: String {
-        let stored = KeychainService.shared.logineoURL
-        if stored.hasPrefix("https://") { return stored }
-        return "https://\(stored)"
+        var stored = KeychainService.shared.logineoURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !stored.lowercased().hasPrefix("http") {
+            stored = "https://\(stored)"
+        }
+        
+        // Extract only the domain part to avoid issues with appended paths/parameters
+        if let url = URL(string: stored), let host = url.host {
+            return "https://\(host)"
+        }
+        
+        return stored
     }
     
     // MARK: - Authentication
@@ -51,10 +59,13 @@ final class LogineoService {
         
         // Step 1: Fetch the login page to get the login token
         let loginPageURL = URL(string: "\(baseURL)/login/index.php")!
-        let (loginPageData, _) = try await session.data(from: loginPageURL)
+        var initialRequest = URLRequest(url: loginPageURL)
+        initialRequest.setValue("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
+        
+        let (loginPageData, _) = try await session.data(for: initialRequest)
         
         guard let html = String(data: loginPageData, encoding: .utf8) else {
-            throw LogineoError.parsingError("Could not read login page")
+            throw LogineoError.parsingError("Login-Seite konnte nicht geladen werden.")
         }
         
         let doc = try SwiftSoup.parse(html)
@@ -64,9 +75,11 @@ final class LogineoService {
         var request = URLRequest(url: loginPageURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("\(baseURL)/login/index.php", forHTTPHeaderField: "Referer")
+        request.setValue("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1", forHTTPHeaderField: "User-Agent")
         
-        var body = "username=\(urlEncode(username))&password=\(urlEncode(password))"
-        if let token = loginToken {
+        var body = "username=\(urlEncode(username))&password=\(urlEncode(password))&anchor="
+        if let token = try doc.select("input[name=logintoken]").first()?.attr("value") {
             body += "&logintoken=\(urlEncode(token))"
         }
         request.httpBody = body.data(using: .utf8)

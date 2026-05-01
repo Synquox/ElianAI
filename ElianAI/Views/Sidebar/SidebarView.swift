@@ -3,6 +3,7 @@ import SwiftData
 
 struct SidebarView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(LogineoService.self) private var logineoService
     @Query(sort: \FolderModel.createdAt, order: .reverse) private var folders: [FolderModel]
     @Binding var selectedDestination: SidebarDestination?
     
@@ -124,10 +125,10 @@ struct SidebarView: View {
             Section {
                 HStack(spacing: 8) {
                     Circle()
-                        .fill(KeychainService.shared.hasLogineoCredentials ? Color.elianSuccess : Color.elianTextTertiary)
+                        .fill(logineoService.isLoggedIn ? Color.elianSuccess : (KeychainService.shared.hasLogineoCredentials ? Color.elianWarning : Color.elianTextTertiary))
                         .frame(width: 8, height: 8)
                     
-                    Text(KeychainService.shared.hasLogineoCredentials ? "Logineo Connected" : "Logineo Not Configured")
+                    Text(logineoService.isLoggedIn ? "Logineo Verbunden" : (KeychainService.shared.hasLogineoCredentials ? "Logineo Eingerichtet" : "Logineo nicht konfiguriert"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.elianTextTertiary)
                 }
