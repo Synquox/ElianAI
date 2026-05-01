@@ -7,6 +7,8 @@ enum SourceType: String, Codable {
     case docx
     case ppt
     case image
+    case audio
+    case multiple
 }
 
 @Model

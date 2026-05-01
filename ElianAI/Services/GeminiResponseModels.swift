@@ -32,22 +32,19 @@ struct TimetableParseEntry: Codable {
 // MARK: - Gemini Model Selection
 
 enum GeminiModelOption: String, CaseIterable, Identifiable {
-    case flash = "gemini-1.5-flash"
-    case flashLite = "gemini-1.5-flash-lite"
+    case flashPreview = "gemini-3-flash-preview"
     
     var id: String { rawValue }
     
     var displayName: String {
         switch self {
-        case .flash: return "Gemini 1.5 Flash"
-        case .flashLite: return "Gemini 1.5 Flash-Lite"
+        case .flashPreview: return "Gemini 3 Flash Preview"
         }
     }
     
     var description: String {
         switch self {
-        case .flash: return "Smart & efficient — great for daily study"
-        case .flashLite: return "Ultra-fast — best for quick tasks"
+        case .flashPreview: return "Advanced logic and multimodal capabilities"
         }
     }
 }

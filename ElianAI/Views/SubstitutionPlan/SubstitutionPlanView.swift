@@ -13,6 +13,12 @@ struct SubstitutionPlanView: View {
     // Stored course selection
     @AppStorage("substitutionPlanCourseId") private var savedCourseId: Int = 0
     @AppStorage("substitutionPlanCourseName") private var savedCourseName: String = ""
+    @AppStorage("substitutionPlanFileURL") private var savedFileURL: String = ""
+    @AppStorage("substitutionPlanFileName") private var savedFileName: String = ""
+    
+    @State private var courseFiles: [MoodleFile] = []
+    @State private var isFetchingFiles = false
+    @State private var showFilePickerSheet = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -48,7 +54,7 @@ struct SubstitutionPlanView: View {
                         .font(.system(size: 16))
                         .foregroundStyle(.elianBlue)
                 }
-                .disabled(savedCourseId == 0)
+                .disabled(savedFileURL.isEmpty)
             }
         }
         .sheet(isPresented: $showCoursePicker) {
@@ -137,14 +143,21 @@ struct SubstitutionPlanView: View {
             Image(systemName: "doc.text.fill")
                 .font(.system(size: 48))
                 .foregroundStyle(.elianTextTertiary)
-            Text("No plan found")
+            Text("Kein Plan gefunden")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(.elianTextSecondary)
-            Text("No file named \"Vertretungsplan\" was found in the selected course.")
+            Text("Bitte wähle in den Einstellungen einen Kurs und eine Datei aus.")
                 .font(.system(size: 14))
                 .foregroundStyle(.elianTextTertiary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 340)
+            
+            Button {
+                showCoursePicker = true
+            } label: {
+                Text("Datei auswählen")
+                    .elianButton(color: .elianBlue)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -189,10 +202,7 @@ struct SubstitutionPlanView: View {
                 } else {
                     List(courses) { course in
                         Button {
-                            savedCourseId = course.id
-                            savedCourseName = course.displayName
-                            showCoursePicker = false
-                            loadPlan()
+                            selectCourse(course)
                         } label: {
                             HStack {
                                 VStack(alignment: .leading) {
@@ -222,18 +232,63 @@ struct SubstitutionPlanView: View {
             }
         }
         .presentationDetents([.medium])
+        .sheet(isPresented: $showFilePickerSheet) {
+            filePickerSheet
+        }
+    }
+    
+    private var filePickerSheet: some View {
+        NavigationStack {
+            VStack {
+                if isFetchingFiles {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("Dateien werden geladen...")
+                    }
+                } else {
+                    List(courseFiles) { file in
+                        Button {
+                            savedFileURL = file.url
+                            savedFileName = file.name
+                            showFilePickerSheet = false
+                            loadPlan()
+                        } label: {
+                            HStack {
+                                Image(systemName: "doc.fill")
+                                    .foregroundStyle(.elianBlue)
+                                Text(file.name)
+                                    .font(.system(size: 14))
+                                Spacer()
+                                if savedFileURL == file.url {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.elianBlue)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Datei auswählen")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Schließen") { showFilePickerSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
     
     // MARK: - Actions
     
     private func loadPlan() {
-        guard savedCourseId != 0 else { return }
+        guard !savedFileURL.isEmpty else { return }
         isLoading = true
         errorMessage = nil
         
         Task {
             do {
-                let data = try await LogineoService.shared.fetchSubstitutionPlan(courseId: savedCourseId)
+                let data = try await LogineoService.shared.downloadFile(url: savedFileURL)
                 await MainActor.run {
                     pdfData = data
                     isLoading = false
@@ -242,6 +297,34 @@ struct SubstitutionPlanView: View {
                 await MainActor.run {
                     errorMessage = error.localizedDescription
                     isLoading = false
+                }
+            }
+        }
+    }
+    
+    private func selectCourse(_ course: MoodleCourse) {
+        savedCourseId = course.id
+        savedCourseName = course.displayName
+        showCoursePicker = false
+        
+        // Now fetch files for this course
+        fetchFiles(for: course.id)
+    }
+    
+    private func fetchFiles(for courseId: Int) {
+        isFetchingFiles = true
+        showFilePickerSheet = true
+        Task {
+            do {
+                let files = try await LogineoService.shared.fetchCourseFiles(courseId: courseId)
+                await MainActor.run {
+                    courseFiles = files
+                    isFetchingFiles = false
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    isFetchingFiles = false
                 }
             }
         }

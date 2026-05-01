@@ -124,23 +124,49 @@ final class LogineoService {
         isLoading = true
         defer { isLoading = false }
         
-        // Try the "my courses" or site home page
-        let url = URL(string: "\(baseURL)/my/courses.php")!
+        // Use the main dashboard page - modern Moodle (Logineo) lists courses here
+        // often in a drawer or on the main page content.
+        let url = URL(string: "\(baseURL)/my/")!
         let (data, _) = try await session.data(from: url)
         
         guard let html = String(data: data, encoding: .utf8) else {
-            throw LogineoError.parsingError("Could not read courses page")
+            throw LogineoError.parsingError("Could not read dashboard page")
         }
         
         let doc = try SwiftSoup.parse(html)
         
         var parsedCourses: [MoodleCourse] = []
         
-        // Parse course list — look for course links
-        let courseLinks = try doc.select("a[href*=/course/view.php]")
+        // Strategy 1: Look for course links in the navigation drawer or main content
+        // Pattern: a[href*=/course/view.php?id=]
+        let courseLinks = try doc.select("a[href*=/course/view.php?id=], a.list-group-item[href*=/course/view.php]")
+        
         for link in courseLinks {
             let href = try link.attr("href")
             let name = try link.text().trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // Skip links that don't look like course names (e.g. icons, generic labels)
+            guard !name.isEmpty, name.count > 2 else { continue }
+            
+            guard let urlComponents = URLComponents(string: href),
+                  let idParam = urlComponents.queryItems?.first(where: { $0.name == "id" }),
+                  let courseId = Int(idParam.value ?? "") else {
+                continue
+            }
+            
+            // Avoid duplicates
+            if !parsedCourses.contains(where: { $0.id == courseId }) {
+                let course = MoodleCourse(id: courseId, fullName: name, shortName: "")
+                parsedCourses.append(course)
+            }
+        }
+        
+        // Strategy 2: Check for course cards (Moodle 4.x style)
+        let courseCards = try doc.select(".coursename, .multiline, .course-name")
+        for card in courseCards {
+            let link = try card.select("a").first() ?? card
+            let href = try link.attr("href")
+            let name = try card.text().trimmingCharacters(in: .whitespacesAndNewlines)
             
             guard !name.isEmpty,
                   let urlComponents = URLComponents(string: href),
@@ -149,7 +175,6 @@ final class LogineoService {
                 continue
             }
             
-            // Avoid duplicates
             if !parsedCourses.contains(where: { $0.id == courseId }) {
                 let course = MoodleCourse(id: courseId, fullName: name, shortName: "")
                 parsedCourses.append(course)

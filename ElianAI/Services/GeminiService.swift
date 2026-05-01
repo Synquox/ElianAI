@@ -8,7 +8,7 @@ final class GeminiService {
     static let shared = GeminiService()
     
     private(set) var isLoading = false
-    private(set) var currentModel: GeminiModelOption = .flash
+    private(set) var currentModel: GeminiModelOption = .flashPreview
     
     /// Tracks current retry state for UI display
     private(set) var retryStatus: RetryStatus = .idle
@@ -51,8 +51,8 @@ final class GeminiService {
     
     // MARK: - Study Content Generation
     
-    /// Generates notes, quizzes, and flashcards from input text in a single API call
-    func generateStudyContent(from text: String) async throws -> StudyContentResponse {
+    /// Generates notes, quizzes, and flashcards from multiple input parts (text, image, audio)
+    func generateStudyContent(from parts: [ModelContent.Part]) async throws -> StudyContentResponse {
         guard let model = generativeModel else {
             throw GeminiError.noAPIKey
         }
@@ -60,8 +60,8 @@ final class GeminiService {
         isLoading = true
         defer { isLoading = false }
         
-        let prompt = """
-        You are an expert study assistant. Analyze the following content and generate comprehensive study materials.
+        let systemPrompt = """
+        You are an expert study assistant. Analyze the provided materials (text, images, and/or audio) and generate comprehensive study materials.
         
         IMPORTANT: Respond ONLY with valid JSON matching the exact schema below. No markdown fences, no extra text.
         
@@ -92,13 +92,13 @@ final class GeminiService {
         - Use emojis to make notes engaging (but not excessive)
         - Include LaTeX for any mathematical or scientific formulas
         - Use tables for comparing related concepts
-        
-        CONTENT TO ANALYZE:
-        \(text)
         """
         
+        var contentParts = parts
+        contentParts.insert(.text(systemPrompt), at: 0)
+        
         let response = try await withRetry(taskName: "Study Material Generation") {
-            try await model.generateContent(prompt)
+            try await model.generateContent(contentParts)
         }
         
         guard let responseText = response.text else {
@@ -121,6 +121,11 @@ final class GeminiService {
         } catch {
             throw GeminiError.decodingFailed(error.localizedDescription)
         }
+    }
+    
+    /// Helper for simple text-only generation
+    func generateStudyContent(from text: String) async throws -> StudyContentResponse {
+        try await generateStudyContent(from: [.text(text)])
     }
     
     // MARK: - Generate Flashcards Only
@@ -339,7 +344,7 @@ final class GeminiService {
     // MARK: - Validate API Key
     
     func validateAPIKey(_ key: String) async -> Bool {
-        let testModel = GenerativeModel(name: "gemini-2.5-flash", apiKey: key)
+        let testModel = GenerativeModel(name: "gemini-3-flash-preview", apiKey: key)
         do {
             let _ = try await testModel.generateContent("Say 'ok'")
             return true

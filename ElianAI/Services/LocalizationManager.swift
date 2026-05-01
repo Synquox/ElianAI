@@ -5,16 +5,9 @@ import Foundation
 final class LocalizationManager {
     static let shared = LocalizationManager()
     
-    var currentLanguage: AppLanguage {
-        didSet {
-            UserDefaults.standard.set(currentLanguage.rawValue, forKey: "appLanguage")
-        }
-    }
+    var currentLanguage: AppLanguage = .german
     
-    private init() {
-        let saved = UserDefaults.standard.string(forKey: "appLanguage") ?? "en"
-        currentLanguage = AppLanguage(rawValue: saved) ?? .english
-    }
+    private init() {}
     
     func localized(_ key: String) -> String {
         Strings.get(key, language: currentLanguage)
@@ -22,21 +15,18 @@ final class LocalizationManager {
 }
 
 enum AppLanguage: String, CaseIterable, Identifiable {
-    case english = "en"
     case german = "de"
     
     var id: String { rawValue }
     
     var displayName: String {
         switch self {
-        case .english: return "English"
         case .german: return "Deutsch"
         }
     }
     
     var flag: String {
         switch self {
-        case .english: return "🇬🇧"
         case .german: return "🇩🇪"
         }
     }
@@ -44,7 +34,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     /// Language code for TTS
     var ttsCode: String {
         switch self {
-        case .english: return "en-US"
         case .german: return "de-DE"
         }
     }

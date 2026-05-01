@@ -10,7 +10,6 @@ struct SettingsView: View {
     @Query(sort: \Subject.name) private var subjects: [Subject]
     @Query(sort: \Textbook.title) private var textbooks: [Textbook]
     
-    @State private var selectedModel: GeminiModelOption = GeminiService.shared.currentModel
     @State private var apiKey: String = ""
     @State private var showAPIKey = false
     @State private var isValidating = false
@@ -31,9 +30,6 @@ struct SettingsView: View {
     @State private var showPDFPicker = false
     @State private var isAddingTextbook = false
     
-    // Language
-    @State private var selectedLanguage: AppLanguage = LocalizationManager.shared.currentLanguage
-    
     // Account
     @State private var isSigningIn = false
     @State private var signInError: String?
@@ -48,44 +44,6 @@ struct SettingsView: View {
                 VStack(spacing: 24) {
                     // Account (Supabase + Google)
                     accountSection
-                    
-                    // Language
-                    settingsSection(title: "Language", icon: "globe", color: .elianGreen) {
-                        HStack(spacing: 12) {
-                            ForEach(AppLanguage.allCases) { lang in
-                                Button {
-                                    withAnimation(.spring(duration: 0.2)) {
-                                        selectedLanguage = lang
-                                        LocalizationManager.shared.currentLanguage = lang
-                                    }
-                                } label: {
-                                    HStack(spacing: 8) {
-                                        Text(lang.flag)
-                                            .font(.system(size: 20))
-                                        Text(lang.displayName)
-                                            .font(.system(size: 14, weight: .semibold))
-                                            .foregroundStyle(.elianTextPrimary)
-                                    }
-                                    .padding(.horizontal, 18)
-                                    .padding(.vertical, 12)
-                                    .background(
-                                        selectedLanguage == lang
-                                            ? Color.elianGreen.opacity(0.12)
-                                            : Color.elianSurfaceSecondary
-                                    )
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(
-                                                selectedLanguage == lang ? Color.elianGreen.opacity(0.3) : Color.clear,
-                                                lineWidth: 1
-                                            )
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
                     
                     // Logineo
                     settingsSection(title: "Logineo LMS", icon: "network", color: .elianBlue) {
@@ -228,11 +186,65 @@ struct SettingsView: View {
                         }
                     }
                     
-                    // AI Model Selection
-                    settingsSection(title: "AI Model", icon: "cpu.fill", color: .elianPurple) {
-                        VStack(spacing: 12) {
-                            ForEach(GeminiModelOption.allCases) { model in
-                                modelRow(model)
+                    // Logineo Course Mapping
+                    settingsSection(title: "Logineo Fächer-Mapping", icon: "arrow.left.arrow.right", color: .elianPurple) {
+                        VStack(spacing: 16) {
+                            if subjects.isEmpty {
+                                Text("No subjects created yet. Add them in the sidebar first.")
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(.elianTextTertiary)
+                            } else {
+                                ForEach(subjects) { subject in
+                                    HStack {
+                                        HStack(spacing: 8) {
+                                            Circle()
+                                                .fill(Color(hex: subject.colorHex))
+                                                .frame(width: 8, height: 8)
+                                            Text(subject.name)
+                                                .font(.system(size: 14, weight: .semibold))
+                                                .foregroundStyle(.elianTextPrimary)
+                                        }
+                                        
+                                        Spacer()
+                                        
+                                        Picker("Logineo Kurs", selection: Binding(
+                                            get: { subject.linkedCourseId },
+                                            set: { newValue in
+                                                subject.linkedCourseId = newValue
+                                                if let course = LogineoService.shared.courses.first(where: { $0.id == newValue }) {
+                                                    subject.linkedCourseName = course.displayName
+                                                } else if newValue == nil {
+                                                    subject.linkedCourseName = nil
+                                                }
+                                            }
+                                        )) {
+                                            Text("Kein Kurs").tag(nil as Int?)
+                                            ForEach(LogineoService.shared.courses) { course in
+                                                Text(course.displayName).tag(course.id as Int?)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+                                        .labelsHidden()
+                                        .font(.system(size: 13))
+                                    }
+                                    .padding(10)
+                                    .background(Color.elianSurfaceSecondary.opacity(0.5))
+                                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                                }
+                                
+                                Button {
+                                    Task {
+                                        try? await LogineoService.shared.fetchCourses()
+                                    }
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Image(systemName: "arrow.clockwise")
+                                        Text("Kurse aktualisieren")
+                                    }
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.elianPurple)
+                                    .padding(.vertical, 8)
+                                }
                             }
                         }
                     }
@@ -484,53 +496,6 @@ struct SettingsView: View {
                 }
             }
         }
-    }
-    
-    // MARK: - Model Row
-    
-    private func modelRow(_ model: GeminiModelOption) -> some View {
-        Button {
-            withAnimation(.spring(duration: 0.2)) {
-                selectedModel = model
-                geminiService.setModel(model)
-            }
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: selectedModel == model ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 20))
-                    .foregroundStyle(
-                        selectedModel == model ? .elianPurple : .elianTextTertiary
-                    )
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.displayName)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.elianTextPrimary)
-                    Text(model.description)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.elianTextTertiary)
-                }
-                
-                Spacer()
-            }
-            .padding(14)
-            .background(
-                selectedModel == model
-                    ? Color.elianPurple.opacity(0.08)
-                    : Color.elianSurfaceSecondary
-            )
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(
-                        selectedModel == model
-                            ? Color.elianPurple.opacity(0.3)
-                            : Color.clear,
-                        lineWidth: 1
-                    )
-            )
-        }
-        .buttonStyle(.plain)
     }
     
     // MARK: - Helpers
