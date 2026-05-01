@@ -111,6 +111,8 @@ private func noteSourceIcon(_ type: SourceType) -> String {
     case .docx: return "doc.richtext.fill"
     case .ppt: return "rectangle.stack.fill"
     case .image: return "photo.fill"
+    case .audio: return "waveform"
+    case .multiple: return "square.stack.3d.up.fill"
     }
 }
 
