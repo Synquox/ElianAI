@@ -98,7 +98,7 @@ final class GeminiService {
         contentParts.insert(.text(systemPrompt), at: 0)
         
         let response = try await withRetry(taskName: "Study Material Generation") {
-            try await model.generateContent(contentParts)
+            try await model.generateContent([ModelContent(role: "user", parts: contentParts)])
         }
         
         guard let responseText = response.text else {
@@ -109,9 +109,9 @@ final class GeminiService {
         let cleaned = responseText
             .replacingOccurrences(of: "```json", with: "")
             .replacingOccurrences(of: "```", with: "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
         
-        guard let jsonData = cleaned.data(using: .utf8) else {
+        guard let jsonData = cleaned.data(using: String.Encoding.utf8) else {
             throw GeminiError.invalidJSON
         }
         

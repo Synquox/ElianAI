@@ -14,16 +14,12 @@ final class AudioRecorderService: NSObject, AVAudioRecorderDelegate {
     }
     
     func startRecording() async throws {
-        let session = AVAudioSession.sharedInstance()
-        
-        // Request permission explicitly
-        if session.recordPermission == .undetermined {
-            await session.requestRecordPermission()
-        }
-        
-        guard session.recordPermission == .granted else {
+        let granted = await AVAudioApplication.requestRecordPermission()
+        guard granted else {
             throw NSError(domain: "AudioRecorder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone access denied"])
         }
+        
+        let session = AVAudioSession.sharedInstance()
         
         try session.setCategory(.playAndRecord, mode: .default)
         try session.setActive(true)

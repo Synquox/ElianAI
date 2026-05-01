@@ -12,6 +12,11 @@ struct UploadMaterialView: View {
     let folder: FolderModel
     @Binding var selectedNote: NoteModel?
     
+    init(folder: FolderModel, selectedNote: Binding<NoteModel?>) {
+        self.folder = folder
+        self._selectedNote = selectedNote
+    }
+    
     @State private var items: [MaterialItem] = []
     @State private var isGenerating = false
     @State private var errorMessage: String?
