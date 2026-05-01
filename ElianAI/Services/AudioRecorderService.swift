@@ -16,9 +16,9 @@ final class AudioRecorderService: NSObject, AVAudioRecorderDelegate {
     func startRecording() async throws {
         let session = AVAudioSession.sharedInstance()
         
-        // Use a more compatible way to request permission that handles all iOS versions reliably
+        // Use the modern iOS 17+ API for record permissions
         let granted = await withCheckedContinuation { continuation in
-            session.requestRecordPermission { response in
+            AVAudioApplication.requestRecordPermission { response in
                 continuation.resume(returning: response)
             }
         }

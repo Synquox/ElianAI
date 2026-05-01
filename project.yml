@@ -47,3 +47,4 @@ targets:
       properties:
         UILaunchScreen: {}
         UIApplicationSupportsMultipleScenes: true
+        UIRequiresFullScreen: true
