@@ -48,7 +48,7 @@ final class SupabaseService {
         isLoading = true
         defer { isLoading = false }
         
-        let url = try await client.auth.getOAuthSignInURL(
+        let url = try client.auth.getOAuthSignInURL(
             provider: .google,
             redirectTo: URL(string: "elianai://auth")
         )
@@ -132,6 +132,7 @@ final class SupabaseService {
             
             try await client.from("homework")
                 .upsert(payload, onConflict: "local_id, user_id")
+                .execute()
         }
     }
     
@@ -142,6 +143,7 @@ final class SupabaseService {
         let response = try await client.from("homework")
             .select()
             .eq("user_id", value: userId)
+            .execute()
         
         // Return raw data for the caller to process
         guard let json = try? JSONSerialization.jsonObject(with: response.data) as? [[String: Any]] else {

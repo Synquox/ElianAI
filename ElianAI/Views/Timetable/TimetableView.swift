@@ -371,7 +371,7 @@ struct TimetableView: View {
             scanError = nil
             
             do {
-                let entries = try await geminiService.parseTimetableImage(imageData: data)
+                let entries = try await GeminiService.shared.parseTimetableImage(imageData: data)
                 
                 applyTimetableEntries(entries)
                 isScanning = false
