@@ -263,8 +263,8 @@ extension MarkdownUI.Theme {
                         FontSize(14)
                         ForegroundColor(.elianTextPrimary)
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(Edge.Set.horizontal, 12)
+                    .padding(Edge.Set.vertical, 8)
             }
             
         return step3
@@ -282,9 +282,9 @@ extension MarkdownUI.Theme {
                             ForegroundColor(.elianTextSecondary)
                             FontStyle(.italic)
                         }
-                        .padding(.leading, 12)
+                        .padding(Edge.Set.leading, 12)
                 }
-                .padding(.vertical, 4)
+                .padding(Edge.Set.vertical, 4)
             }
     }
 }
