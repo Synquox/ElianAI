@@ -5,6 +5,7 @@ import SwiftData
 struct ElianAIApp: App {
     @State private var geminiService = GeminiService.shared
     @State private var supabaseService = SupabaseService.shared
+    @State private var logineoService = LogineoService.shared
     
     init() {
         BackgroundSyncService.shared.registerBackgroundTasks()
@@ -16,6 +17,7 @@ struct ElianAIApp: App {
             RootView()
                 .environment(geminiService)
                 .environment(supabaseService)
+                .environment(logineoService)
                 .preferredColorScheme(.dark)
                 .onOpenURL { url in
                     // Handle Supabase OAuth callback
